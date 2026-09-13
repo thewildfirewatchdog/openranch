@@ -368,7 +368,7 @@ if (!$pinOk && !$customer) {
 //
 // Resolving by name is deliberately gone. Auto-provisioning gives every
 // board the same `name` it announces, so "RS150 Pump Button" matched two
-// rows (id 26, MAC 48:3F:DA:53:25:0D and id 27, MAC 24:62:AB:08:6F:74).
+// rows (id 26, MAC AA:BB:CC:DD:EE:01 and id 27, MAC AA:BB:CC:DD:EE:02).
 // Any name query then had to break the tie on some incidental column, and
 // picked the row that was NOT the live board -- the page polled a silent
 // device while the operator believed they were driving the bench board.
@@ -378,7 +378,7 @@ if (!$pinOk && !$customer) {
 // CLEAN SLATE 2026-08-27 01:25 UTC: ids 26 and 27 (and all their readings and
 // commands) were deleted deliberately to end the two-board ambiguity above.
 // The one powered board re-registered itself via register.php as id 28
-// (MAC 48:3F:DA:53:25:0D, fw 8) and was enabled by hand. It is now the ONLY
+// (MAC AA:BB:CC:DD:EE:01, fw 8) and was enabled by hand. It is now the ONLY
 // row whose name or slug matches RS150 -- there is nothing left to tie-break,
 // so the id below is unambiguous rather than a guess between duplicates.
 //
