@@ -26,6 +26,7 @@ import subprocess
 import tempfile
 import time
 from collections import deque
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -82,6 +83,25 @@ ACTION_TOOLS = {
 # Tools whose result carries a picture the customer should actually see, rather
 # than a URL for the model to describe.
 PHOTO_TOOLS = {"get_latest_snapshot"}
+# Anything that can hand back a snapshot URL. Kept separate so a future
+# read-only camera tool is covered without editing the attach logic.
+CAMERA_TOOLS = {"list_cameras"}
+
+
+def snapshot_urls(payload) -> list[tuple[str, str, str]]:
+    """Pull (camera name, image url, taken) out of whatever shape a camera tool
+    returned -- one snapshot, or a list of cameras each with a latest."""
+    found = []
+    if not isinstance(payload, dict):
+        return found
+    if payload.get("url"):
+        found.append((payload.get("camera") or "Camera",
+                      payload["url"], payload.get("taken", "")))
+    for c in payload.get("cameras") or []:
+        latest = (c or {}).get("latest") or {}
+        if latest.get("url"):
+            found.append((c.get("name") or "Camera", latest["url"], latest.get("taken", "")))
+    return found
 
 SYSTEM = """You are the OpenRanch assistant. You help one person look after their
 own ranch hardware over Telegram: sensors, irrigation zones, watering programs
@@ -247,9 +267,15 @@ async def run_claude(chat_id: int, token: str, user_text: str) -> str:
 
     final_text = ""
     for _ in range(8):                                     # bound the tool loop
+        # The model has no clock of its own. Without the current time it cannot
+        # say how old a reading or a picture is, and it guesses -- which is how
+        # a four-minute-old photo gets described as "taken yesterday".
+        system = (SYSTEM + "\n\nThe current time is "
+                  + datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
+                  + " UTC. All timestamps you receive are UTC.")
         resp = await asyncio.to_thread(
             claude.messages.create,
-            model=MODEL, max_tokens=4096, system=SYSTEM,
+            model=MODEL, max_tokens=4096, system=system,
             tools=TOOLS.schemas, messages=messages,
         )
         if resp.stop_reason == "refusal":
@@ -298,15 +324,18 @@ async def execute_tool(chat_id: int, token: str, name: str, args: dict) -> str:
         log.exception("tool %s failed", name)
         return json.dumps({"error": f"{type(e).__name__}: {e}"})
 
-    # A picture is worth sending, not describing. Grab the bytes now and let the
-    # handler attach them; the model still gets the JSON so it can talk about it.
-    if name in PHOTO_TOOLS:
+    # A picture is worth sending, not describing. Any tool result that carries a
+    # snapshot URL gets its bytes fetched and attached -- not just the obvious
+    # one, because the model sometimes reaches for list_cameras instead and
+    # would otherwise tell the customer a photo is on its way when none is.
+    if name in PHOTO_TOOLS or name in CAMERA_TOOLS:
         try:
-            j = json.loads(out)
-            if j.get("url"):
-                img = await asyncio.to_thread(fetch_photo, j["url"], token)
+            for cam_name, url, taken in snapshot_urls(json.loads(out)):
+                if len(st.photos) >= 3:
+                    break
+                img = await asyncio.to_thread(fetch_photo, url, token)
                 if img:
-                    st.photos.append((img, f"{j.get('camera', 'Camera')} — {j.get('taken', '')} UTC"))
+                    st.photos.append((img, f"{cam_name} — {taken} UTC"))
         except Exception:                                     # noqa: BLE001
             log.exception("photo attach failed")
 

@@ -48,7 +48,11 @@ Cover, only where the data actually says something:
 
 Use "notification", "limit" and "automation" rather than alert, threshold or
 rule. Never invent a number. If nothing happened, say so in one sentence rather
-than padding it out."""
+than padding it out.
+
+Do not invent anything about the property. You do not know whether there are
+animals, crops or people there, so do not write consequences that assume them --
+describe what the devices measured and what the person might do about it."""
 
 
 def summary_for(token: str, hours: int = 24) -> dict:

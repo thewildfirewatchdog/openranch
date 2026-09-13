@@ -189,7 +189,7 @@ case 'GET me':
 case 'GET devices':
   $col = mirror_col();
   $sql = "SELECT d.id, d.slug, d.name, d.variables, d.commandable, d.enabled,
-                 d.expected_interval, d.notes, $col
+                 d.expected_interval, d.notes, d.is_camera, $col
             FROM devices d WHERE d.customer_id = ?" . mirror_sql($isAdmin) . ' ORDER BY d.name';
   $q = $db->prepare($sql); $q->execute([$cid]);
   $devices = [];
@@ -205,11 +205,26 @@ case 'GET devices':
     $last = $db->prepare('SELECT MAX(created) FROM readings WHERE device_id = ?');
     $last->execute([$d['id']]);
     $lastSeen = $last->fetchColumn() ?: null;
+
+    // A camera reports by uploading pictures, not readings. Judging it by the
+    // readings table makes every camera look permanently offline, which is both
+    // wrong and the kind of thing the assistant will repeat to the customer.
+    $camera_last = null;
+    if (!empty($d['is_camera'])) {
+      $cs = $db->prepare('SELECT taken FROM snapshots WHERE device_id = ? ORDER BY taken DESC, id DESC LIMIT 1');
+      $cs->execute([$d['id']]);
+      $camera_last = $cs->fetchColumn() ?: null;
+      $lastSeen = $camera_last;
+    }
     $ageMin = $lastSeen ? round((time() - strtotime($lastSeen . ' UTC')) / 60) : null;
     $devices[] = [
       'id' => (int)$d['id'], 'slug' => $d['slug'], 'name' => $d['name'],
       'enabled' => (bool)$d['enabled'], 'commandable' => (bool)$d['commandable'],
       'mirrored' => (bool)$d['is_mirrored'],
+      'is_camera' => (bool)($d['is_camera'] ?? 0),
+      'note' => !empty($d['is_camera'])
+        ? 'This is a camera: it sends pictures, not readings. Use list_cameras or get_latest_snapshot.'
+        : null,
       'controllable' => (bool)$d['commandable'] && (bool)$d['enabled'] && empty($d['is_mirrored']),
       'last_seen' => $lastSeen, 'minutes_since_report' => $ageMin,
       'offline' => $ageMin === null ? true : $ageMin > max(15, ((int)$d['expected_interval'] * 3) / 60),
@@ -401,7 +416,7 @@ case 'POST rules/delete':
   if (!$st->rowCount()) fail('no such automation on this account', 404);
   out(['status' => 'deleted']);
 
-case 'GET cameras':
+case 'GET cameras':   // snapshot_age
   $cams = [];
   foreach (cam_devices($db, $cid) as $d) {
     if (!empty($d['is_mirrored']) && !$isAdmin) continue;
@@ -411,6 +426,8 @@ case 'GET cameras':
       'mirrored' => (bool)($d['is_mirrored'] ?? 0),
       'latest' => $latest ? [
         'file' => $latest['filename'], 'taken' => $latest['taken'],
+        'taken_utc' => $latest['taken'] . ' UTC',
+        'age_minutes' => (int)round((time() - strtotime($latest['taken'] . ' UTC')) / 60),
         'source' => $latest['source'],
         'url' => (defined('BASE_URL') ? rtrim(BASE_URL, '/') : '')
                . '/snapshot.php?device=' . rawurlencode($d['slug'])
@@ -418,7 +435,8 @@ case 'GET cameras':
       ] : null,
     ];
   }
-  out(['cameras' => $cams, 'count' => count($cams)]);
+  out(['now_utc' => gmdate('Y-m-d H:i:s') . ' UTC',
+       'cameras' => $cams, 'count' => count($cams)]);
 
 case 'POST cameras/request':
   $q = $db->prepare('SELECT * FROM devices WHERE slug = ? AND customer_id = ? AND is_camera = 1');
@@ -461,11 +479,29 @@ case 'GET summary':
   $w = $s['weather_json'] ? irr_weather_extract(json_decode($s['weather_json'], true)) : null;
 
   $col = mirror_col();
-  $dq = $db->prepare("SELECT d.id, d.name, d.slug, d.expected_interval, $col
+  $dq = $db->prepare("SELECT d.id, d.name, d.slug, d.expected_interval, d.is_camera, $col
                         FROM devices d WHERE d.customer_id = ?" . mirror_sql($isAdmin));
   $dq->execute([$cid]);
-  $offline = []; $levels = [];
+  $offline = []; $levels = []; $cameras = [];
   foreach ($dq->fetchAll(PDO::FETCH_ASSOC) as $d) {
+    if (!empty($d['is_camera'])) {
+      // Cameras send pictures, not readings. Measuring them against the
+      // readings table reports every camera as offline, which the assistant
+      // then repeats to the customer as a fault that does not exist.
+      $cs = $db->prepare('SELECT taken FROM snapshots WHERE device_id = ? ORDER BY taken DESC, id DESC LIMIT 1');
+      $cs->execute([$d['id']]);
+      $last = $cs->fetchColumn() ?: null;
+      $ageH = $last ? (time() - strtotime($last . ' UTC')) / 3600 : null;
+      $cameras[] = ['name' => $d['name'], 'slug' => $d['slug'],
+                    'latest_picture_utc' => $last,
+                    'picture_age_minutes' => $ageH === null ? null : (int)round($ageH * 60)];
+      if ($ageH === null || $ageH > 12) {
+        $offline[] = ['name' => $d['name'], 'last_seen' => $last,
+                      'hours' => $ageH === null ? null : round($ageH, 1),
+                      'kind' => 'camera'];
+      }
+      continue;
+    }
     $l = $db->prepare('SELECT MAX(created) FROM readings WHERE device_id = ?');
     $l->execute([$d['id']]);
     $last = $l->fetchColumn();
@@ -487,7 +523,7 @@ case 'GET summary':
   out(['hours' => $hours, 'now_utc' => gmdate('c'),
        'runs' => $runs->fetchAll(PDO::FETCH_ASSOC),
        'skips' => $skips->fetchAll(PDO::FETCH_ASSOC),
-       'levels' => $levels, 'offline_devices' => $offline,
+       'levels' => $levels, 'offline_devices' => $offline, 'cameras' => $cameras,
        'weather' => $w, 'weather_cached_at' => $s['weather_at'],
        'rain_delay_until' => $s['rain_delay_until']]);
 }

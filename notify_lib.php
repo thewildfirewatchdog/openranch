@@ -53,8 +53,13 @@ Return ONE sentence, plain English, under 200 characters. No greeting, no
 sign-off, no markdown, no emoji. It may be read aloud.
 
 Say what happened and what it means in practice. Use the numbers you are given
-and nothing else -- never invent a reading, a name or a time. Say
-"notification", "limit" and "automation" rather than alert, threshold or rule.
+and nothing else -- never invent a reading, a name or a time.
+
+Do not invent anything about the property itself. You do not know whether there
+are cattle, crops, people or anything else there, so do not write consequences
+that assume them. Stick to what the device measured and what the customer might
+reasonably do about it. Say "notification", "limit" and "automation" rather than
+alert, threshold or rule.
 
 If the facts are thin, a shorter sentence is better than a padded one.
 SYS;
