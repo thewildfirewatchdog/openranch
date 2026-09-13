@@ -364,46 +364,30 @@ if (!$pinOk && !$customer) {
 // ---------------------------------------------------------------
 // Device selection.
 //
-// Default: the bench board, pinned by PRIMARY KEY.
+// Default: DEFAULT_PUMP_SLUG from config.php. An explicit ?device=<slug>
+// overrides it, unchanged.
 //
-// Resolving by name is deliberately gone. Auto-provisioning gives every
-// board the same `name` it announces, so "RS150 Pump Button" matched two
-// rows (id 26, MAC AA:BB:CC:DD:EE:01 and id 27, MAC AA:BB:CC:DD:EE:02).
+// Resolving by name is deliberately gone. Auto-provisioning gives every board
+// the same `name` it announces, so "RS150 Pump Button" once matched two rows.
 // Any name query then had to break the tie on some incidental column, and
 // picked the row that was NOT the live board -- the page polled a silent
 // device while the operator believed they were driving the bench board.
-// Verified 2026-08-26: id 27 is the board that actually ingests
-// (relay_state/rssi/heartbeat/fw_version every ~12-18s); id 26 never has.
 //
-// CLEAN SLATE 2026-08-27 01:25 UTC: ids 26 and 27 (and all their readings and
-// commands) were deleted deliberately to end the two-board ambiguity above.
-// The one powered board re-registered itself via register.php as id 28
-// (MAC AA:BB:CC:DD:EE:01, fw 8) and was enabled by hand. It is now the ONLY
-// row whose name or slug matches RS150 -- there is nothing left to tie-break,
-// so the id below is unambiguous rather than a guess between duplicates.
-//
-// An explicit ?device=<slug> still overrides this, unchanged.
+// Slug is the key that cannot go ambiguous like that: schema.sql declares
+// UNIQUE KEY slug (slug), while name carries no unique index. This block used
+// to resolve a hard-coded primary key first and fall back to a slug; that id
+// was a leftover from the same collision, and it pinned the page to one
+// install's row numbering -- on anybody else's database it would open whatever
+// device happened to land at that id. Gone; the slug decides on its own.
 // ---------------------------------------------------------------
 
-const DEFAULT_DEVICE_ID = 28;
-
-// The slug fallback comes from config.php (DEFAULT_PUMP_SLUG) rather than
-// being hard-coded here: the old literal pinned this file to one particular
-// install, and register.php builds a slug suffix from the last five hex of the
-// board's MAC, so shipping it also published part of that MAC.
-//
 // defined() rather than a bare constant so an install whose config.php predates
-// DEFAULT_PUMP_SLUG still loads: it simply has no fallback, and the page needs
+// DEFAULT_PUMP_SLUG still loads: it simply has no default, and the page needs
 // an explicit ?device=<slug>.
 $defaultSlug = defined('DEFAULT_PUMP_SLUG') ? trim((string)DEFAULT_PUMP_SLUG) : '';
 
 $slug = trim((string)($_GET['device'] ?? ''));
-if ($slug === '') {
-  // By id, so a renamed or duplicated row can never re-point this page.
-  $stmt = db()->prepare('SELECT slug FROM devices WHERE id = ?');
-  $stmt->execute([DEFAULT_DEVICE_ID]);
-  $slug = $stmt->fetchColumn() ?: $defaultSlug;
-}
+if ($slug === '') $slug = $defaultSlug;
 
 $stmt = db()->prepare('SELECT * FROM devices WHERE slug = ?');
 $stmt->execute([$slug]);
