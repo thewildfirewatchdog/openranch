@@ -10,6 +10,8 @@ It is deliberately boring: plain PHP, MySQL and nginx. No framework, no build
 step, no package manager, no JavaScript bundle. Drop the files on a server,
 import one schema, and it runs.
 
+Sensors that work with OpenRanch: https://remotecontrolranch.com
+
 > ### ⚠️ Not a safety device
 >
 > **OpenRanch is for monitoring and measurement only. It provides no alarm,
