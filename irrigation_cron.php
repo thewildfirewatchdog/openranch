@@ -31,8 +31,20 @@ const IRR_SUBTICK   = 5;    // seconds between passes
 const IRR_TICK_SPAN = 55;   // stop before the next cron invocation starts
 
 // A run that overruns must never overlap the next one.
-$lockFh = fopen(sys_get_temp_dir() . '/openranch-irrigation.lock', 'c');
-if ($lockFh === false || !flock($lockFh, LOCK_EX | LOCK_NB)) {
+//
+// The lock path carries the effective uid: a file left behind by a different
+// user (running this by hand as root, say) would otherwise be unopenable by the
+// cron user, and every tick would exit having done nothing.
+$lockPath = sprintf('%s/openranch-irrigation-%s.lock', sys_get_temp_dir(),
+                    function_exists('posix_geteuid') ? posix_geteuid() : 'x');
+$lockFh = @fopen($lockPath, 'c');
+if ($lockFh === false) {
+  // Never fail silently here -- a scheduler that cannot lock is a scheduler
+  // that is not running, and that should be loud in the cron log.
+  fwrite(STDERR, "irrigation: cannot open lock $lockPath; not running this tick\n");
+  exit(1);
+}
+if (!flock($lockFh, LOCK_EX | LOCK_NB)) {
   vlog('another tick is still running; exiting');
   exit(0);
 }
