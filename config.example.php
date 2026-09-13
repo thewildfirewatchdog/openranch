@@ -92,6 +92,19 @@ define('DEFAULT_PUMP_SLUG', 'example_pump');
 define('FREE_DEVICE_LIMIT', 3);
 
 // ---------------------------------------------------------------------------
+// Reading retention by plan. A nightly prune (prune_readings.php) deletes
+// readings older than the owning customer's allowance, so a free account keeps
+// a week and a paid one keeps a quarter.
+//
+// Devices with no customer, and mirrored devices, are NOT covered here:
+// unassigned rows fall under RETENTION_DAYS and mirrored rows under
+// MIRROR_RETENTION_DAYS, both pruned elsewhere. Lowering either number below
+// deletes data on the next run and there is no undo.
+// ---------------------------------------------------------------------------
+define('FREE_RETENTION_DAYS', 7);
+define('PRO_RETENTION_DAYS',  90);
+
+// ---------------------------------------------------------------------------
 // Timezone the irrigation scheduler reads start times in. A program set to
 // water at 06:00 means six in the morning where the valves are, so this must be
 // the site's local zone rather than the host clock, which is usually UTC.

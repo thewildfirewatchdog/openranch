@@ -7,6 +7,7 @@ function or_bottom_nav($active = '') {
   $items = [
     'controls' => ['controls.php', 'Controls', 'M4 12h5l2-5 3 10 2-5h4'],
     'sensors'  => ['index.php?tab=1', 'Sensors',  'M12 4v8l5 3M12 20a8 8 0 1 1 0-16 8 8 0 0 1 0 16z'],
+    'graphs'   => ['graphs.php',   'Graphs',   'M4 19V5M4 19h16M8 15l3-5 3 3 4-7'],
     'programs' => ['programs.php', 'Programs', 'M5 5h14v14H5zM5 9h14M9 3v4M15 3v4'],
     'rules'    => ['rules.php',    'Rules',    'M5 12h4l3-7 3 14 3-7h3'],
     'more'     => ['more.php',     'More',     'M5 12h.01M12 12h.01M19 12h.01'],

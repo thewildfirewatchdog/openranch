@@ -7,7 +7,7 @@ require_once __DIR__ . '/nav.php';
 function irr_head($title, $active = '') {
   $GLOBALS['irr_active_page'] = $active;
   $site = defined('SITE_NAME') ? SITE_NAME : 'OpenRanch';
-  $tabs = ['index.php' => 'Dashboard', 'zones.php' => 'Zones',
+  $tabs = ['index.php' => 'Dashboard', 'graphs.php' => 'Graphs', 'zones.php' => 'Zones',
            'programs.php' => 'Programs', 'rules.php' => 'Automations'];
   ?>
 <!DOCTYPE html>
@@ -88,7 +88,8 @@ function irr_foot() {
   echo "</div>\n";
   // Map the top-nav key onto the bottom-nav key; they are the same pages.
   $map = ['zones.php' => 'sensors', 'programs.php' => 'programs',
-          'rules.php' => 'rules',   'more.php' => 'more'];
+          'rules.php' => 'rules',   'more.php' => 'more',
+          'graphs.php' => 'graphs'];
   or_bottom_nav($map[$GLOBALS['irr_active_page'] ?? ''] ?? '');
   echo "</body>\n</html>\n";
 }

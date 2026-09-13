@@ -455,6 +455,42 @@ Setup is in [`bot/README.md`](bot/README.md), the tool surface in
 [`docs/api-v1.md`](docs/api-v1.md). Run `migrate_bot.sql` to add
 `customers.api_token` and `customers.telegram_chat_id`.
 
+## Graphs and retention
+
+`/graphs.php` draws one card per device, every metric it reports as a line over
+the last 7 days. Tap a card for a full-screen view with a 24h / 7d / 30d / 90d
+picker. Ranges longer than the plan keeps are disabled, because the readings
+genuinely are not there — and the server clamps the range too, so the limit is
+not just a greyed button.
+
+`heartbeat` and `fw_version` are left out of the default view; they chart fine
+but tell nobody anything. Each line is downsampled to about 400 points, so a
+board reporting every 30 seconds over 90 days still loads on a phone.
+
+### Retention by plan
+
+| Plan | Readings kept | Constant |
+|---|---|---|
+| free | 7 days | `FREE_RETENTION_DAYS` |
+| pro | 90 days | `PRO_RETENTION_DAYS` |
+
+```cron
+17 3 * * * www-data /usr/bin/php /var/www/openranch/prune_readings.php
+```
+
+`prune_readings.php` deletes in 5,000-row chunks with a pause between them: one
+unbounded `DELETE` over a few hundred thousand rows locks the table long enough
+for `ingest.php` to start timing out. `--dry-run` counts without deleting, `-v`
+prints per customer.
+
+Two kinds of row are deliberately **not** covered by it: devices with no
+customer (operator-owned — `ingest.php`'s own `RETENTION_DAYS` self-prune covers
+those) and mirrored devices, which keep their separate 90-day
+`MIRROR_RETENTION_DAYS` prune. This install is the longer-term record for
+mirrored rows, so shortening them here would destroy the only copy.
+
+Free accounts see "Free plan keeps 7 days — upgrade for 90" on the graphs page.
+
 ## How a device posts readings
 
 `POST /ingest.php` with a `Device-Token` header. Two body shapes are accepted:
@@ -508,6 +544,7 @@ The ones you are most likely to change:
 | `PROVISION_KEY` | Shared secret for self-registering boards |
 | `FREE_DEVICE_LIMIT` | Devices one customer may claim without a `'pro'` plan (default `3`) |
 | `IRRIGATION_TZ` | Zone the irrigation scheduler reads program start times in |
+| `FREE_RETENTION_DAYS` / `PRO_RETENTION_DAYS` | How long readings are kept, by plan (7 / 90) |
 | `VAPID_*` | Web Push keypair; leave empty to disable push and use email |
 | `ALERT_EMAIL` | Where outage notifications go |
 
@@ -542,6 +579,8 @@ claim.php            customer claims a device with its code
 claim_lib.php        claim codes, sensor-type naming, free-tier counting
 signup.php           customer self-signup
 controls.php         phone-first Controls screen
+graphs.php           per-device charts + the series endpoint
+prune_readings.php   nightly per-plan retention prune
 nav.php              bottom navigation bar
 more.php             account and the rest of the pages
 session_compat.php   session-helper shim, see the note below
