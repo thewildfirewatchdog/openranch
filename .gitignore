@@ -1,0 +1,29 @@
+# Local configuration — holds the database password, admin PIN, provisioning
+# secret and the Web Push private key. Never commit this.
+config.php
+
+# Backups and editor leftovers. A stray config.php.bak would leak everything
+# config.php does, and a web server will happily serve it as plain text.
+*.bak
+*.bak.*
+*~
+*.orig
+*.rej
+*.swp
+
+# Logs and local env
+*.log
+.env
+.env.*
+
+# Tooling / agent scratch
+.claude/
+scratchpad/
+.DS_Store
+
+# Dependencies (this project vendors nothing today; here so it stays that way)
+node_modules/
+vendor/
+
+# Demo/runtime flags and state
+DEMO_ON

@@ -1,0 +1,25 @@
+# gitleaks configuration for OpenRanch.
+#
+# Extends the default ruleset and adds one narrow allowlist entry. Keep it
+# narrow: the point of scanning is to catch a real key before it is committed,
+# and a broad exclusion here would silently defeat that.
+
+[extend]
+useDefault = true
+
+[[rules]]
+  # Re-declare the default private-key rule so we can attach a scoped allowlist.
+  id = "private-key"
+  description = "Private key"
+  regex = '''-----BEGIN[ A-Z]*PRIVATE KEY( BLOCK)?-----'''
+  keywords = ["-----BEGIN"]
+
+  [rules.allowlist]
+    description = """
+    config.example.php ships an empty PEM block as a placeholder so operators
+    can see exactly where their VAPID private key goes. The 'secret' inside it
+    is the literal string CHANGE_ME_... — there is no key material here.
+    A real config.php is gitignored and never scanned.
+    """
+    paths = ['''^config\.example\.php$''']
+    regexes = ['''CHANGE_ME_OR_LEAVE_THE_WHOLE_BLOCK_EMPTY_TO_DISABLE_WEB_PUSH''']
