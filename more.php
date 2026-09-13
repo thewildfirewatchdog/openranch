@@ -41,6 +41,7 @@ irr_head('More', 'more.php');
     <a class="btn ghost" href="rules.php">Automations</a>
     <a class="btn ghost" href="claim.php">Add a device</a>
     <a class="btn ghost" href="assistant.php">Telegram assistant</a>
+    <a class="btn ghost" href="integrations.php">Integrations &amp; export</a>
   </div>
 </div>
 

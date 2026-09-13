@@ -8,7 +8,8 @@
 // and sends a recovery note when it comes back.
 
 require 'config.php';
-require_once 'wpush.php';   // web push helpers (no-op unless VAPID is configured)
+require_once 'wpush.php';
+require_once 'notify_lib.php';  // plain-English wording, with this file's text as the fallback   // web push helpers (no-op unless VAPID is configured)
 
 // tiny state table, created on first run
 db()->exec('CREATE TABLE IF NOT EXISTS alert_state (
@@ -55,15 +56,15 @@ foreach ($devices as $d) {
     // the email notifications or the rest of the run.
     if (!empty($d['customer_id'])) {
       try {
-        $r = wp_send_to_customer((int)$d['customer_id'], [
-          'title' => $d['name'] . ' has stopped reporting',
-          'body'  => 'No data for ' . round($age/60) . ' minutes. Tap to check the dashboard.',
-          'tag'   => 'stale-' . $d['id'],
-          'url'   => '/',
-        ]);
-        echo "  push {$d['slug']}: sent {$r['sent']}, failed {$r['failed']}\n";
+        $body = notice_send(db(), (int)$d['customer_id'], 'offline',
+          $d['name'] . ' has stopped reporting',
+          ['device' => $d['name'], 'minutes_silent' => round($age / 60),
+           'expected_interval_seconds' => (int)$d['expected_interval'],
+           'last_reading_utc' => $last],
+          'No data for ' . round($age / 60) . ' minutes. Tap to check the dashboard.');
+        echo "  notice {$d['slug']}: " . $body . "\n";
       } catch (Throwable $e) {
-        echo "  push {$d['slug']} error: " . $e->getMessage() . "\n";
+        echo "  notice {$d['slug']} error: " . $e->getMessage() . "\n";
       }
     }
     db()->prepare('REPLACE INTO alert_state (device_id, alerted) VALUES (?, 1)')->execute([$d['id']]);
@@ -78,15 +79,13 @@ foreach ($devices as $d) {
     }
     if (!empty($d['customer_id'])) {
       try {
-        $r = wp_send_to_customer((int)$d['customer_id'], [
-          'title' => $d['name'] . ' is back online',
-          'body'  => 'Reporting resumed at ' . $last . '.',
-          'tag'   => 'ok-' . $d['id'],
-          'url'   => '/',
-        ]);
-        echo "  push {$d['slug']}: sent {$r['sent']}, failed {$r['failed']}\n";
+        $body = notice_send(db(), (int)$d['customer_id'], 'back_online',
+          $d['name'] . ' is back online',
+          ['device' => $d['name'], 'resumed_utc' => $last],
+          'Reporting resumed at ' . $last . '.');
+        echo "  notice {$d['slug']}: " . $body . "\n";
       } catch (Throwable $e) {
-        echo "  push {$d['slug']} error: " . $e->getMessage() . "\n";
+        echo "  notice {$d['slug']} error: " . $e->getMessage() . "\n";
       }
     }
     db()->prepare('REPLACE INTO alert_state (device_id, alerted) VALUES (?, 0)')->execute([$d['id']]);

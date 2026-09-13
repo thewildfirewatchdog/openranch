@@ -491,6 +491,94 @@ mirrored rows, so shortening them here would destroy the only copy.
 
 Free accounts see "Free plan keeps 7 days — upgrade for 90" on the graphs page.
 
+## MQTT and Home Assistant
+
+Optional, per customer. Switch it on under **More → Integrations** and you get a
+broker account of your own: every reading is published, commands are accepted
+back, and Home Assistant discovers the lot automatically.
+
+```
+readings  openranch/<customer>/<device>/<metric>      e.g. openranch/11/tank/tank_level_pct
+commands  openranch/<customer>/<device>/set           payload 0-5, same codes as cmd.php
+zones     openranch/<customer>/zone/<id>/set          1 runs the zone, 0 stops it
+          openranch/<customer>/zone/<id>/state        running | idle
+```
+
+Connect on **port 8883 with TLS**, username `openranch_<id>`, and the password
+shown once when you generate it. The certificate is the dashboard's own, so any
+normal CA bundle validates it. Port 1883 exists but is bound to loopback for the
+bridge; nothing off-box can reach it.
+
+### What stops one customer reading another's
+
+Mosquitto's ACL confines each account to `openranch/<their id>/#`. Anonymous
+access is off on both listeners. The credentials file is written by a root-owned
+sync job (`openranch-mqtt-sync.php`, once a minute) from a spool the web user
+drops requests into — the dashboard never writes to `/etc/mosquitto`, and the
+password is hashed by `mosquitto_passwd` and never stored anywhere readable.
+
+### Home Assistant
+
+Discovery messages are published retained under `homeassistant/…/config`, so HA
+picks things up whenever it connects:
+
+| OpenRanch | Appears in HA as |
+|---|---|
+| every device variable | a sensor, with units for `_pct`, `psi`, `gpm`, `_gal`, `temp_c`, `_v`, `rssi` |
+| a commandable, enabled device | a switch on `…/set` |
+| an irrigation zone | a switch that runs it for its default duration |
+
+**Mirrored devices appear as sensors only.** Their boards poll the system they
+came from, so a command written here would be read by nobody — the bridge
+refuses them outright rather than reporting a success that never happened.
+
+The bridge runs as `openranch-mqtt-bridge.service` and shells out to
+`mosquitto_pub`/`mosquitto_sub` rather than carrying a hand-rolled MQTT client:
+there is no packaged PHP extension for it, and the official tools are less code
+to be wrong.
+
+## Public status link
+
+**More → Integrations → Create a share link** gives you
+`https://…/s/<32-hex token>`: tank and pressure levels, zone state, when each
+zone last watered, and a 7-day chart. No login, no controls, no account details.
+
+The token is the whole of the authorisation, so it is long, random, revocable,
+and the page starts no session and resolves no cookie. `noindex` is set. Rotating
+the link kills the old one immediately.
+
+## Notifications in plain English
+
+Limit crossings, automations firing, unscheduled flow and devices going quiet all
+go out through `notify_lib.php`. Each starts as a template, and when Claude is
+configured the template plus the underlying numbers are rewritten into one plain
+sentence before sending by push and, if a chat is linked, Telegram.
+
+**The template is always a complete, sendable message.** The model is an
+improvement, never a dependency — if the API is unreachable, out of credit or
+slow, the original wording goes out and the reason is logged. Each customer gets
+at most **20 generated notices a day** (`NOTICE_DAILY_CAP`); past that notices
+keep flowing, just in the template wording.
+
+The API key is read from `/opt/openranch-bot/.env` rather than duplicated into
+the dashboard config: one copy, one owner.
+
+## Export and reports
+
+Every device can be exported as CSV from **More → Integrations** with a date
+range (`export.php?device=<slug>&from=&to=[&metric=]`). The range is clamped to
+what the plan still retains, and rows are streamed unbuffered — 90 days of a
+ten-variable board is a few hundred thousand rows and would otherwise exhaust
+PHP's memory limit.
+
+An optional water-use email goes out on the 1st of each month covering the month
+just gone: runs and minutes per zone, gallons where a flow meter exists, and a
+count of why anything was skipped. Opt in on the same page.
+
+```cron
+0 7 1 * * www-data /usr/bin/php /var/www/openranch/monthly_report.php
+```
+
 ## How a device posts readings
 
 `POST /ingest.php` with a `Device-Token` header. Two body shapes are accepted:
@@ -580,6 +668,12 @@ claim_lib.php        claim codes, sensor-type naming, free-tier counting
 signup.php           customer self-signup
 controls.php         phone-first Controls screen
 graphs.php           per-device charts + the series endpoint
+integrations.php     MQTT, share link, CSV export, monthly email
+status.php           the public /s/<token> status page
+export.php           CSV export
+mqtt_bridge.php      readings out, commands in, HA discovery
+notify_lib.php       plain-English notification wording, template fallback
+monthly_report.php   monthly water-use email
 prune_readings.php   nightly per-plan retention prune
 nav.php              bottom navigation bar
 more.php             account and the rest of the pages
@@ -609,6 +703,7 @@ migrate_irrigation.sql  adds the irrigation tables to an existing install
 migrate_master_lead.sql adds the master valve lead columns
 migrate_controls.sql    adds the per-zone tap duration
 migrate_bot.sql         adds API tokens + Telegram linking
+migrate_mqtt.sql        adds MQTT access, share links, monthly email
 api/v1/index.php        the assistant API (see docs/api-v1.md)
 assistant.php           API token, link code and assistant preferences
 bot/                    Telegram assistant + morning briefing + systemd units

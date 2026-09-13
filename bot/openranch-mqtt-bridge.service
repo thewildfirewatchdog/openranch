@@ -1,0 +1,21 @@
+[Unit]
+Description=OpenRanch MQTT bridge (readings out, commands in, HA discovery)
+After=network-online.target mosquitto.service mariadb.service
+Wants=network-online.target
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/rcr-dash
+ExecStart=/usr/bin/php /var/www/rcr-dash/mqtt_bridge.php
+Restart=always
+RestartSec=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+StandardOutput=append:/var/log/openranch-mqtt.log
+StandardError=append:/var/log/openranch-mqtt.log
+
+[Install]
+WantedBy=multi-user.target

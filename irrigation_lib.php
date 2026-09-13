@@ -8,6 +8,7 @@
 // require config.php themselves and pass db() in.
 
 require_once __DIR__ . '/session_compat.php';
+require_once __DIR__ . '/notify_lib.php';
 
 // ===========================================================================
 // Pure scheduling logic
@@ -438,10 +439,17 @@ function irr_any_running(PDO $db, $cid) {
 // ---- notifications ---------------------------------------------------------
 // Wording note: these are notifications, not alerts -- the UI and the payloads
 // both say "notification" throughout.
-function irr_notify(PDO $db, $cid, $title, $body) {
+function irr_notify(PDO $db, $cid, $title, $body, $kind = 'irrigation', array $context = []) {
+  // notify_lib rewrites the wording through Claude when that is available and
+  // the customer has budget left, and falls back to exactly this text when it
+  // is not. Delivery (push + Telegram) is its job too.
+  if (function_exists('notice_send')) {
+    try { notice_send($db, $cid, $kind, $title, $context ?: ['message' => $body], $body); return; }
+    catch (Throwable $e) { error_log('notice_send failed: ' . $e->getMessage()); }
+  }
   if (function_exists('wp_send_to_customer')) {
     try { wp_send_to_customer($cid, ['title' => $title, 'body' => $body, 'tag' => 'openranch-irrigation']); }
-    catch (Throwable $e) { /* push is best-effort; the log below is the record */ }
+    catch (Throwable $e) { /* push is best-effort; the log is the record */ }
   }
 }
 
@@ -494,7 +502,11 @@ function irr_check_unscheduled_flow(PDO $db, $cid, array $s, DateTimeInterface $
 
     $detail = sprintf('%s reads %.2f with the zone closed, for %d min',
                       $z['flow_variable'], $gpm, (int)$mins);
-    irr_notify($db, $cid, 'Unscheduled flow on ' . $z['name'], $detail);
+    irr_notify($db, $cid, 'Unscheduled flow on ' . $z['name'], $detail, 'flow_watch', [
+      'zone' => $z['name'], 'metric' => $z['flow_variable'], 'gallons_per_minute' => $gpm,
+      'minutes_flowing' => (int)$mins, 'zone_is_closed' => true,
+      'limit_gpm' => $minGpm, 'notify_after_minutes' => $minutes,
+    ]);
     irr_log_skip($db, $cid, 'flow_watch', $z['name'] . ': ' . $detail, null, $z['id']);
     $db->prepare('UPDATE irr_leak_state SET notified = NOW() WHERE zone_id = ?')->execute([$z['id']]);
   }
@@ -563,7 +575,11 @@ function irr_fire_rule(PDO $db, $cid, array $r, $value) {
   }
 
   // Every action notifies, so a rule that moved hardware is never silent.
-  irr_notify($db, $cid, 'Automation: ' . $r['name'], $msg);
+  irr_notify($db, $cid, 'Automation: ' . $r['name'], $msg, 'automation', [
+    'automation' => $r['name'], 'metric' => $r['metric'], 'operator' => $r['op'],
+    'limit' => (float)$r['value'], 'reading_now' => $value,
+    'held_for_minutes' => (int)$r['for_minutes'], 'action' => $r['action'],
+  ]);
   $db->prepare('INSERT INTO irr_skips (customer_id, reason, detail) VALUES (?, ?, ?)')
      ->execute([$cid, 'rule', mb_strimwidth_safe($r['name'] . ': ' . $msg, 255)]);
 }
