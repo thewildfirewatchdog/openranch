@@ -66,6 +66,20 @@ define('RETENTION_DAYS', 9);
 define('FLOW_TZ', 'UTC');
 
 // ---------------------------------------------------------------------------
+// Default device for the pump page (pump.php).
+//
+// pump.php resolves its board by primary key first and falls back to this slug
+// when that row is missing. Set it to the slug of the board you want the page
+// to open on -- admin.php lists every slug. Auto-registered devices get a slug
+// ending in the last five hex of their MAC (register.php), so treat it as
+// install-specific and don't copy one out of someone else's config.
+//
+// Leave it as-is, or drop the line entirely, and pump.php simply has no
+// default: the page then needs an explicit ?device=<slug>.
+// ---------------------------------------------------------------------------
+define('DEFAULT_PUMP_SLUG', 'example_pump');
+
+// ---------------------------------------------------------------------------
 // Auto-provisioning shared secret. Boards send this as the Provision-Key
 // header to register.php on first boot to claim a device row and receive their
 // own permanent token. Generate one with:

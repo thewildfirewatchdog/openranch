@@ -386,14 +386,23 @@ if (!$pinOk && !$customer) {
 // ---------------------------------------------------------------
 
 const DEFAULT_DEVICE_ID = 28;
-const DEFAULT_SLUG      = 'rs150_pump_button_3250d';   // id 28, kept in sync
+
+// The slug fallback comes from config.php (DEFAULT_PUMP_SLUG) rather than
+// being hard-coded here: the old literal pinned this file to one particular
+// install, and register.php builds a slug suffix from the last five hex of the
+// board's MAC, so shipping it also published part of that MAC.
+//
+// defined() rather than a bare constant so an install whose config.php predates
+// DEFAULT_PUMP_SLUG still loads: it simply has no fallback, and the page needs
+// an explicit ?device=<slug>.
+$defaultSlug = defined('DEFAULT_PUMP_SLUG') ? trim((string)DEFAULT_PUMP_SLUG) : '';
 
 $slug = trim((string)($_GET['device'] ?? ''));
 if ($slug === '') {
   // By id, so a renamed or duplicated row can never re-point this page.
   $stmt = db()->prepare('SELECT slug FROM devices WHERE id = ?');
   $stmt->execute([DEFAULT_DEVICE_ID]);
-  $slug = $stmt->fetchColumn() ?: DEFAULT_SLUG;
+  $slug = $stmt->fetchColumn() ?: $defaultSlug;
 }
 
 $stmt = db()->prepare('SELECT * FROM devices WHERE slug = ?');
