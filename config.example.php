@@ -68,9 +68,9 @@ define('FLOW_TZ', 'UTC');
 // ---------------------------------------------------------------------------
 // Default device for the pump page (pump.php).
 //
-// pump.php resolves its board by primary key first and falls back to this slug
-// when that row is missing. Set it to the slug of the board you want the page
-// to open on -- admin.php lists every slug. Auto-registered devices get a slug
+// pump.php opens on this device unless the URL names another with
+// ?device=<slug>. Set it to the slug of the board you want it to default to --
+// admin.php lists every slug. Auto-registered devices get a slug
 // ending in the last five hex of their MAC (register.php), so treat it as
 // install-specific and don't copy one out of someone else's config.
 //
@@ -78,6 +78,18 @@ define('FLOW_TZ', 'UTC');
 // default: the page then needs an explicit ?device=<slug>.
 // ---------------------------------------------------------------------------
 define('DEFAULT_PUMP_SLUG', 'example_pump');
+
+// ---------------------------------------------------------------------------
+// Free tier. How many devices one customer may claim in claim.php without a
+// paid plan. Devices mirrored from another system (devices.is_mirrored = 1)
+// are never counted -- they are not the customer's to begin with.
+//
+// A customer whose customers.plan column is 'pro' is not limited. Nothing sets
+// that automatically yet: with no Stripe keys below, claim.php shows a "contact
+// us" prompt at the limit and you set the column by hand. Once the Stripe keys
+// ARE filled in, the prompt links to checkout.php instead.
+// ---------------------------------------------------------------------------
+define('FREE_DEVICE_LIMIT', 3);
 
 // ---------------------------------------------------------------------------
 // Auto-provisioning shared secret. Boards send this as the Provision-Key

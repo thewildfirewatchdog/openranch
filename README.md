@@ -164,8 +164,14 @@ curl -X POST https://dashboard.example.com/register.php \
 ```
 
 ```json
-{"status":"created","slug":"ridge_sprinkler","token":"...","note":"..."}
+{"status":"created","slug":"ridge_sprinkler","token":"...",
+ "claim_code":"7QK4WM","claimed":false,"note":"..."}
 ```
+
+`claim_code` is a single-use, 6-character code the board should display so
+whoever installed it can claim the device in `/claim.php`. It is stable across
+reboots -- re-registering the same MAC returns the same code -- and becomes
+`null` once the device is claimed. See **Claiming a device** below.
 
 ### Option B — insert the row yourself
 
@@ -196,6 +202,58 @@ VALUES ('ridge_sprinkler', 'Ridge Sprinkler', MD5(RAND()),
    and are visible to anonymous visitors.
 
 Full registration reference: [docs/firmware-payload.md](docs/firmware-payload.md).
+
+## Claiming a device
+
+A registered device arrives disabled and belongs to nobody. Rather than an
+operator enabling it by hand in `admin.php`, the person who installed it can
+claim it themselves:
+
+1. The board shows the `claim_code` it got from `/register.php`.
+2. They sign in (or create an account at `/signup.php` -- email and password,
+   no admin involvement) and open **Add a device** on the dashboard.
+3. They type the code. The device is assigned to their account, **enabled**,
+   named from the sensor type it reports (`flow_gpm` + `total_gal` becomes
+   "Flow Meter", and a second one becomes "Flow Meter 2"), and the code is
+   cleared so it cannot be used again.
+
+Claiming is what replaces an operator flipping `enabled` by hand, so it is also
+where the free-tier limit is enforced.
+
+Codes use a 32-character alphabet with `0`, `O`, `1` and `I` removed, so nothing
+read off a small display is ambiguous. A code that is not exactly right is
+rejected rather than guessed at -- claiming the wrong device would be worse than
+asking someone to retype six characters.
+
+### Free tier
+
+`FREE_DEVICE_LIMIT` in `config.php` (default `3`) caps how many devices one
+account may claim. A customer whose `customers.plan` column is `'pro'` is not
+capped:
+
+```sql
+UPDATE customers SET plan = 'pro' WHERE email = 'someone@example.com';
+```
+
+Nothing sets that column automatically. With the Stripe keys empty -- which is
+how this ships -- `claim.php` shows a "contact us" prompt at the limit. Fill the
+Stripe keys in and the same prompt links to `checkout.php` instead, which this
+release does not include.
+
+Devices that arrived from a one-way mirror of another install
+(`devices.is_mirrored = 1`, a column stock OpenRanch does not have) never get a
+claim code, cannot be claimed, and are never counted against anyone's limit.
+
+### Upgrading an existing install
+
+```bash
+mysql openranch < migrate_claim.sql
+```
+
+Adds `devices.claim_code` and `customers.plan`. Safe to run more than once, and
+it leaves existing rows alone: current devices keep `claim_code NULL` and every
+existing customer lands on `free`. Boards already in the field get a code the
+next time they re-register.
 
 ## How a device posts readings
 
@@ -248,6 +306,7 @@ The ones you are most likely to change:
 | `RETENTION_DAYS` | How long readings are kept. `ingest.php` prunes older rows automatically |
 | `FLOW_TZ` | Timezone for daily-chart day boundaries (readings are always stored UTC) |
 | `PROVISION_KEY` | Shared secret for self-registering boards |
+| `FREE_DEVICE_LIMIT` | Devices one customer may claim without a `'pro'` plan (default `3`) |
 | `VAPID_*` | Web Push keypair; leave empty to disable push and use email |
 | `ALERT_EMAIL` | Where outage notifications go |
 
@@ -261,7 +320,14 @@ The ones you are most likely to change:
 - **Device tokens are bearer credentials.** Anyone holding one can post
   readings as that device.
 - There is no rate limiting. If the endpoints are internet-facing and you need
-  it, put it in nginx.
+  it, put it in nginx. This now includes `signup.php`: signup is open and
+  unverified by design, so anyone who can reach the page can create an account.
+  An account with no claimed devices can see nothing a visitor cannot, and
+  `FREE_DEVICE_LIMIT` caps what one can ever hold — but if that is not a trade
+  you want, put the page behind auth or drop it.
+- **Claim codes are bearer credentials until they are spent.** Anyone who reads
+  a board's display can claim that device. They are single-use and cleared on
+  claim, so the window is one claim wide.
 
 ## Project layout
 
@@ -270,7 +336,10 @@ index.php            dashboard + JSON data endpoint + 24h history
 admin.php            device and customer management (PIN)
 ingest.php           device -> server: readings
 poll.php             device <- server: pending command
-register.php         device self-provisioning
+register.php         device self-provisioning (mints the claim code)
+claim.php            customer claims a device with its code
+claim_lib.php        claim codes, sensor-type naming, free-tier counting
+signup.php           customer self-signup
 cmd.php              dashboard -> command slot
 thresholds.php       threshold editor API
 thresholds_lib.php   threshold evaluation and hysteresis
@@ -282,6 +351,7 @@ pump.php             full-screen single-device control page
 login.php logout.php customer sessions
 sw.js pwa.js         service worker and install prompt
 schema.sql           complete database schema
+migrate_claim.sql    adds claim codes + plans to an existing install
 config.example.php   configuration template
 install.sh           installer
 ```

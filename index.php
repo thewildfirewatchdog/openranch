@@ -166,6 +166,11 @@ if (isset($_GET['history'])) {
   .who b { color:var(--text); font-weight:500; }
   .who a { color:var(--accent); text-decoration:none; margin-left:10px; }
   .who a:hover { text-decoration:underline; }
+  /* Adding a device is the one action a new account needs, so it reads as a
+     button rather than sitting in the row of plain links beside it. */
+  .who a.addbtn { background:var(--accent); color:#3a2205; font-weight:700;
+                  padding:5px 10px; border-radius:7px; }
+  .who a.addbtn:hover { text-decoration:none; filter:brightness(1.05); }
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:14px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
   .card.template { opacity:.55; }
@@ -340,6 +345,7 @@ if (isset($_GET['history'])) {
   <div class="who">
     <?php if ($customer): ?>
       signed in as <b><?= htmlspecialchars($customer['name'] !== '' ? $customer['name'] : $customer['email']) ?></b>
+      <a href="claim.php" class="addbtn">+ Add a device</a>
       <button type="button" class="pushbtn" id="pushbtn" style="display:none">Enable notifications</button>
       <a href="logout.php">sign out</a>
     <?php else: ?>

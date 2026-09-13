@@ -1,6 +1,6 @@
 <?php
 // OpenRanch Dashboard v2 — customer login
-// Customers are created by the administrator in admin.php. There is no self-signup.
+// Customers sign themselves up in signup.php; admin.php can still create one.
 // On success the session holds customer_id; index.php and cmd.php read it.
 
 require 'config.php';
@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <?php if ($error): ?><div class="err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
 
-  <div class="foot">Need an account? Contact OpenRanch.<br>
+  <div class="foot">Need an account? <a href="signup.php">Create one</a>.<br>
     <a href="index.php">&larr; Back to public dashboard</a></div>
 </form>
 <div id="installbar"></div>

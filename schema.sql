@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS customers (
   password_hash VARCHAR(255) NOT NULL,      -- password_hash(), PASSWORD_DEFAULT
   name          VARCHAR(100) NOT NULL DEFAULT '',
   created       DATETIME DEFAULT CURRENT_TIMESTAMP,
+  plan VARCHAR(16) NOT NULL DEFAULT 'free',  -- 'free' (FREE_DEVICE_LIMIT applies) or 'pro'
   UNIQUE KEY email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -47,8 +48,10 @@ CREATE TABLE IF NOT EXISTS devices (
   notes             VARCHAR(255) DEFAULT '',
   customer_id       INT DEFAULT NULL,       -- NULL = unassigned / operator-owned
   mac               VARCHAR(17) DEFAULT NULL, -- set by register.php self-provisioning
+  claim_code        CHAR(6) DEFAULT NULL,   -- single-use code; NULL once claimed
   UNIQUE KEY slug (slug),
   UNIQUE KEY uniq_mac (mac),                -- many NULLs allowed; real MACs unique
+  UNIQUE KEY uniq_claim_code (claim_code),  -- likewise: many NULLs, live codes unique
   KEY idx_customer (customer_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
