@@ -28,7 +28,16 @@ CREATE TABLE IF NOT EXISTS customers (
   name          VARCHAR(100) NOT NULL DEFAULT '',
   created       DATETIME DEFAULT CURRENT_TIMESTAMP,
   plan VARCHAR(16) NOT NULL DEFAULT 'free',  -- 'free' (FREE_DEVICE_LIMIT applies) or 'pro'
-  UNIQUE KEY email (email)
+  api_token     CHAR(40) DEFAULT NULL,      -- bearer token for /api/v1/
+  telegram_chat_id BIGINT DEFAULT NULL,     -- chat bound by the assistant's /link
+  link_code     CHAR(6) DEFAULT NULL,       -- short single-use code for /link
+  link_expires  DATETIME DEFAULT NULL,
+  bot_voice     TINYINT NOT NULL DEFAULT 1, -- send a voice note with replies
+  bot_briefing  TINYINT NOT NULL DEFAULT 1, -- include in the 07:00 briefing
+  bot_bind_next TINYINT NOT NULL DEFAULT 0, -- one-shot: bind the next /start
+  UNIQUE KEY email (email),
+  UNIQUE KEY uniq_api_token (api_token),
+  KEY idx_telegram (telegram_chat_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------------

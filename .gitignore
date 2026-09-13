@@ -15,6 +15,9 @@ config.php
 *.log
 .env
 .env.*
+# ...but the documented template is the point of shipping it.
+!.env.example
+!bot/.env.example
 
 # Tooling / agent scratch
 .claude/

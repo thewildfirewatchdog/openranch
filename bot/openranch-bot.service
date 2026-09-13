@@ -1,0 +1,28 @@
+[Unit]
+Description=OpenRanch Telegram assistant
+After=network-online.target openranch-mcp.service
+Wants=network-online.target
+Requires=openranch-mcp.service
+
+[Service]
+Type=simple
+User=openranch-bot
+Group=openranch-bot
+WorkingDirectory=/opt/openranch-bot
+ExecStart=/opt/openranch-bot/venv/bin/python /opt/openranch-bot/bot/openranch_bot.py
+Restart=always
+RestartSec=10
+# Whisper and Piper load models into this process; give it room but not the box.
+MemoryMax=3G
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/openranch-bot/var
+Environment=HOME=/opt/openranch-bot
+Environment=XDG_CACHE_HOME=/opt/openranch-bot/var/cache
+StandardOutput=append:/var/log/openranch-bot.log
+StandardError=append:/var/log/openranch-bot.log
+
+[Install]
+WantedBy=multi-user.target

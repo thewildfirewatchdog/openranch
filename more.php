@@ -40,6 +40,7 @@ irr_head('More', 'more.php');
     <a class="btn ghost" href="programs.php">Programs &amp; weather</a>
     <a class="btn ghost" href="rules.php">Automations</a>
     <a class="btn ghost" href="claim.php">Add a device</a>
+    <a class="btn ghost" href="assistant.php">Telegram assistant</a>
   </div>
 </div>
 

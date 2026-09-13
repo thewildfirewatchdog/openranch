@@ -429,6 +429,32 @@ Tapping **Sensors** pins the dashboard for the rest of the session, so the
 redirect does not fight the tab. Anonymous visitors are never redirected: the
 public dashboard stays the front page.
 
+## Telegram assistant
+
+Optional. Ask about the ranch in plain English, by text or voice, and act on the
+answer. Claude does the talking; the [MCP server](mcp/) provides the tools; the
+[`/api/v1/`](docs/api-v1.md) API decides what is allowed.
+
+```
+Telegram ──▶ bot ──▶ Claude ──▶ MCP tools ──▶ /api/v1/ ──▶ commands table ──▶ boards
+```
+
+Hardware is still only ever driven by rows in the `commands` table, so firmware
+is unaffected.
+
+**Linking a chat:** the customer signs in, opens **More → Telegram assistant**,
+taps *Get a link code* (six characters, 15 minutes, single use) and sends the
+bot `/link ABC234`. Until a chat is bound it can see nothing.
+
+**Actions are gated in code, not by prompting.** The first call to anything that
+moves hardware returns `confirmation_required` and touches nothing; the bot asks
+with Yes/No buttons, and only a yes runs it — once.
+
+Setup is in [`bot/README.md`](bot/README.md), the tool surface in
+[`mcp/README.md`](mcp/README.md), the HTTP API in
+[`docs/api-v1.md`](docs/api-v1.md). Run `migrate_bot.sql` to add
+`customers.api_token` and `customers.telegram_chat_id`.
+
 ## How a device posts readings
 
 `POST /ingest.php` with a `Device-Token` header. Two body shapes are accepted:
@@ -543,6 +569,11 @@ migrate_claim.sql    adds claim codes + plans to an existing install
 migrate_irrigation.sql  adds the irrigation tables to an existing install
 migrate_master_lead.sql adds the master valve lead columns
 migrate_controls.sql    adds the per-zone tap duration
+migrate_bot.sql         adds API tokens + Telegram linking
+api/v1/index.php        the assistant API (see docs/api-v1.md)
+assistant.php           API token, link code and assistant preferences
+bot/                    Telegram assistant + morning briefing + systemd units
+mcp/                    MCP server exposing the API as tools
 icons/openranch-mark.svg  the mark every icon size is generated from
 config.example.php   configuration template
 install.sh           installer

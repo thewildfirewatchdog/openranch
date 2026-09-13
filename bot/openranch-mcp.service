@@ -1,0 +1,24 @@
+[Unit]
+Description=OpenRanch MCP server (loopback tool API for the assistant)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openranch-bot
+Group=openranch-bot
+WorkingDirectory=/opt/openranch-bot
+ExecStart=/opt/openranch-bot/venv/bin/python /opt/openranch-bot/mcp/openranch_mcp.py
+Restart=always
+RestartSec=5
+# Nothing here needs to write outside its own state directory.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/openranch-bot/var
+StandardOutput=append:/var/log/openranch-mcp.log
+StandardError=append:/var/log/openranch-mcp.log
+
+[Install]
+WantedBy=multi-user.target
