@@ -6,3 +6,6 @@ Screenshots referenced by the top-level README go here:
 
 Crop to the content, keep them under ~300 KB, and make sure no real device
 token, customer email, admin PIN or hostname is visible in the capture.
+
+`homepage.png` is also kept here (remotecontrolranch.com) but is not currently
+referenced by the top-level README.

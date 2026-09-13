@@ -48,11 +48,13 @@ Sensors that work with OpenRanch: https://remotecontrolranch.com
 
 ## Screenshots
 
-<!-- TODO: replace these placeholders with real screenshots. -->
-
 | Dashboard | Flow meter card | Admin |
 |---|---|---|
-| _`docs/img/dashboard.png` — the device grid, live / stale / template cards_ | _`docs/img/flow-meter.png` — GPM readout, totals, 7-day usage chart_ | _`docs/img/admin.png` — adding a device and assigning it to a customer_ |
+| [![Dashboard](docs/img/dashboard.png)](docs/img/dashboard.png) | [![Flow meter card](docs/img/flow-meter.png)](docs/img/flow-meter.png) | [![Admin](docs/img/admin.png)](docs/img/admin.png) |
+| The device grid — live / stale / waiting / template cards | GPM readout, totals, 7-day usage chart | Tokens, MACs and customer assignment |
+
+<sub>Captured from a live install. Device tokens, MAC addresses, the provisioning
+key and customer email addresses are masked.</sub>
 
 ---
 
