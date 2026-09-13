@@ -12,6 +12,7 @@
 require __DIR__ . '/config.php';
 require_once __DIR__ . '/irrigation_lib.php';
 require_once __DIR__ . '/nav.php';
+require_once __DIR__ . '/camera_lib.php';
 or_boot_session();
 
 $customer = current_customer();
@@ -35,7 +36,10 @@ catch (PDOException $e) {   // a stock install has no is_mirrored column
                        WHERE customer_id = ? AND commandable = 1 AND enabled = 1 ORDER BY name');
   $dq->execute([$cid]); $devices = $dq->fetchAll(PDO::FETCH_ASSOC);
 }
-$loose = array_values(array_filter($devices, fn($d) => !in_array($d['id'], $zoneDevs)));
+$cameras = cam_devices($db, $cid);
+$camIds  = array_column($cameras, 'id');
+$loose = array_values(array_filter($devices,
+  fn($d) => !in_array($d['id'], $zoneDevs) && !in_array($d['id'], $camIds)));
 
 // Latest command per device, so a tile can show what the board was last told.
 $lastCmd = [];
@@ -115,6 +119,8 @@ $held = !empty($s['rain_delay_until']) && (new DateTimeImmutable($s['rain_delay_
   .tile .cd { margin-top:auto; font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:600; }
   .tile .state { margin-top:auto; font-size:12px; color:var(--dim); }
   .tile.on .state { color:#6b4410; font-weight:700; }
+  .tile .camthumb { width:100%; border-radius:8px; margin:6px 0 2px; display:block; }
+  .tile.cam { min-height:0; }
   .tile .tag { position:absolute; top:9px; right:9px; font-size:9px; letter-spacing:.06em;
                text-transform:uppercase; color:var(--dim); }
   .tile.on .tag { color:#6b4410; }
@@ -192,7 +198,30 @@ $held = !empty($s['rain_delay_until']) && (new DateTimeImmutable($s['rain_delay_
 </div>
 <?php endif; ?>
 
-<p class="hint">Tap to run &middot; press and hold a zone to leave it on or off</p>
+<?php if ($cameras): ?>
+<h2 class="sec">Cameras</h2>
+<div class="grid">
+  <?php foreach ($cameras as $cam): $latest = cam_latest($db, $cam['id']); ?>
+  <div class="tile cam" data-kind="camera" data-slug="<?= htmlspecialchars($cam['slug']) ?>"
+       <?= (!$cam['enabled'] || !empty($cam['is_mirrored'])) ? 'data-readonly="1"' : '' ?>>
+    <span class="tag"><?= !empty($cam['is_mirrored']) ? 'mirrored' : 'camera' ?></span>
+    <div class="nm"><?= htmlspecialchars($cam['name']) ?></div>
+    <?php if ($latest): ?>
+      <img class="camthumb" loading="lazy"
+           src="snapshot.php?device=<?= urlencode($cam['slug']) ?>&file=<?= urlencode($latest['filename']) ?>&thumb=1"
+           alt="latest picture from <?= htmlspecialchars($cam['name']) ?>">
+      <div class="sub"><?= htmlspecialchars(substr($latest['taken'], 11, 5)) ?> UTC</div>
+    <?php else: ?>
+      <div class="state">No picture yet</div>
+      <div class="sub">waiting for the camera</div>
+    <?php endif; ?>
+  </div>
+  <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
+<p class="hint">Tap to run &middot; press and hold a zone to leave it on or off
+  <?= $cameras ? '&middot; tap a camera to ask for a fresh picture' : '' ?></p>
 
 <form id="act" method="post" action="irrigation_run.php" hidden>
   <input type="hidden" name="act" id="a_act"><input type="hidden" name="zone_id" id="a_zone">
@@ -257,6 +286,10 @@ document.querySelectorAll('.tile').forEach(t => {
     if (t.dataset.kind === 'zone') {
       t.dataset.running === '1' ? post('stop', t.dataset.id)
                                 : post('run', t.dataset.id, t.dataset.minutes);
+    } else if (t.dataset.kind === 'camera') {
+      // A mirrored or switched-off camera is shown but cannot be asked.
+      if (t.dataset.readonly) { t.classList.remove('busy'); return; }
+      cmd(t.dataset.slug, 6);
     } else {
       cmd(t.dataset.slug, t.dataset.on === '1' ? 0 : 1);
     }

@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS devices (
   customer_id       INT DEFAULT NULL,       -- NULL = unassigned / operator-owned
   mac               VARCHAR(17) DEFAULT NULL, -- set by register.php self-provisioning
   claim_code        CHAR(6) DEFAULT NULL,   -- single-use code; NULL once claimed
+  is_camera         TINYINT NOT NULL DEFAULT 0, -- uploads JPEG snapshots
   UNIQUE KEY slug (slug),
   UNIQUE KEY uniq_mac (mac),                -- many NULLs allowed; real MACs unique
   UNIQUE KEY uniq_claim_code (claim_code),  -- likewise: many NULLs, live codes unique
@@ -335,4 +336,24 @@ CREATE TABLE IF NOT EXISTS irr_fires (
   fire_key   VARCHAR(32) NOT NULL,   -- 'YYYY-MM-DD HH:MM' in the local zone
   created    DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uniq_fire (program_id, fire_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------------
+-- snapshots -- one row per stored camera image. The files themselves live
+-- under snapshots/<device-slug>/; this table is what the gallery, the
+-- timeline and the retention prune actually read.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS snapshots (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  device_id   INT NOT NULL,
+  customer_id INT DEFAULT NULL,        -- denormalised: retention is per plan
+  filename    VARCHAR(64) NOT NULL,    -- basename only; the directory is the slug
+  bytes       INT NOT NULL DEFAULT 0,
+  width       INT DEFAULT NULL,
+  height      INT DEFAULT NULL,
+  source      VARCHAR(10) NOT NULL DEFAULT 'auto',  -- auto | manual | mirror
+  taken       DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_dev_file (device_id, filename),
+  KEY idx_dev_time (device_id, taken),
+  KEY idx_customer_time (customer_id, taken)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -62,6 +62,7 @@ function claim_unique_code(PDO $db) {
 // matters: the first rule whose required variables are all present wins, so the
 // specific combinations sit above the single-variable catch-alls.
 const CLAIM_TYPES = [
+  ['Camera',              ['snapshot']],
   ['Flow Meter',          ['flow_gpm', 'total_gal']],
   ['Flow Meter',          ['flow_gpm', 'total_gallons']],
   ['Flame / Smoke Sensor',['flame_status', 'smoke_ppm']],
@@ -79,7 +80,9 @@ const CLAIM_TYPES = [
   ['Battery Monitor',     ['battery_v']],
 ];
 
-function claim_type_label($variables) {
+function claim_type_label($variables, $isCamera = false) {
+  // A camera has no variables worth naming it from, so the flag decides.
+  if ($isCamera) return 'Camera';
   $have = array_flip(array_map('trim', explode(',', (string)$variables)));
   foreach (CLAIM_TYPES as [$label, $need]) {
     $ok = true;

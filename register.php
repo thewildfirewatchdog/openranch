@@ -71,6 +71,13 @@ if ($interval < 5 || $interval > 86400) $interval = 60;
 
 $commandable = !empty($body['commandable']) ? 1 : 0;
 
+// A camera announces itself at registration. It is still an ordinary device --
+// same claim flow, same token, same poll.php -- but it uploads JPEGs to
+// cam_upload.php instead of readings, and the dashboard draws it as a picture.
+// Cameras are commandable by definition: that is how "take a photo" reaches them.
+$isCamera = !empty($body['camera']) ? 1 : 0;
+if ($isCamera) $commandable = 1;
+
 $notes       = utf8_cut(trim((string)($body['notes'] ?? '')), 255);
 
 // ---- already registered? then hand back what it already has ----
@@ -152,10 +159,10 @@ if ($claim === null) json_out(['error' => 'could not allocate a claim code'], 50
 try {
   db()->prepare(
     'INSERT INTO devices (slug, name, token, variables, commandable, enabled,
-                          expected_interval, notes, mac, customer_id, claim_code)
-     VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, NULL, ?)')
+                          expected_interval, notes, mac, customer_id, claim_code, is_camera)
+     VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, NULL, ?, ?)')
     ->execute([$slug, $name, $token, $variables, $commandable, $interval, $notes,
-               $mac, $claim]);
+               $mac, $claim, $isCamera]);
 } catch (PDOException $e) {
   // Two boards with the same MAC racing each other: the unique index wins and
   // we simply return whichever row landed first.
@@ -175,6 +182,7 @@ try {
 json_out([
   'status'     => 'created',
   'slug'       => $slug,
+  'camera'     => (bool)$isCamera,
   'token'      => $token,
   'claim_code' => $claim,
   'claimed'    => false,

@@ -31,7 +31,11 @@ if (($_POST['pin'] ?? '') !== ADMIN_PIN) {
 
 $slug = $_POST['slug'] ?? '';
 $cmd  = (int)($_POST['cmd'] ?? -1);
-if ($cmd < 0 || $cmd > 5) json_out(['error' => 'cmd must be 0-5'], 400);
+// 0-5 are the relay codes boards have always understood. 6 is "take a photo",
+// read only by cameras; a relay never receives one because only a camera card
+// sends it. The range widened rather than a second endpoint appearing, so
+// poll.php stays the single place a board asks "what should I do".
+if ($cmd < 0 || $cmd > 6) json_out(['error' => 'cmd must be 0-6'], 400);
 
 $stmt = db()->prepare('SELECT id, enabled, commandable, customer_id FROM devices WHERE slug = ?');
 $stmt->execute([$slug]);

@@ -75,10 +75,34 @@ if (isset($_GET['data'])) {
     $th    = $allThresholds[$d['slug']] ?? [];
     $alarm = or_threshold_rollup($d, $th, $allStates[(int)$d['id']] ?? [], $lastSeen);
 
+    // A camera reports by uploading pictures, not readings, so its freshness
+    // has to come from the snapshot table or every camera reads as silent.
+    if (!empty($d['is_camera'])) {
+      $sq = db()->prepare('SELECT taken FROM snapshots WHERE device_id = ? ORDER BY taken DESC, id DESC LIMIT 1');
+      $sq->execute([$d['id']]);
+      $camSeen = $sq->fetchColumn();
+      if ($camSeen) {
+        $lastSeen = $camSeen;
+        $age = time() - strtotime($camSeen . ' UTC');
+        $state = $age > max(900, (int)$d['expected_interval'] * 3) ? 'stale' : 'live';
+      } elseif ($d['enabled']) {
+        $state = 'waiting';
+      }
+    }
+
     $out[] = [
       'slug' => $d['slug'], 'name' => $d['name'],
       'variables' => array_map('trim', explode(',', $d['variables'])),
       'commandable' => (int)$d['commandable'], 'enabled' => (int)$d['enabled'],
+      'is_camera'   => (int)($d['is_camera'] ?? 0),
+      'last_snapshot' => (int)($d['is_camera'] ?? 0)
+          ? (function ($id) {
+              $q = db()->prepare('SELECT filename, taken FROM snapshots
+                                   WHERE device_id = ? ORDER BY taken DESC, id DESC LIMIT 1');
+              $q->execute([$id]);
+              return $q->fetch(PDO::FETCH_ASSOC) ?: null;
+            })($d['id'])
+          : null,
       'notes' => $d['notes'], 'state' => $state,
       'values' => $vals, 'last_seen' => $lastSeen,
       'thresholds' => array_values(array_map(fn($t) => [
@@ -188,6 +212,26 @@ if (isset($_GET['history'])) {
   .dot.template { background:var(--dim); }
   .badge { margin-left:auto; font-size:10px; letter-spacing:.08em; color:var(--dim); }
   .notes { font-size:11px; color:var(--dim); margin:6px 0 10px; }
+  .camwrap { position:relative; border-radius:10px; overflow:hidden; cursor:pointer;
+             background:var(--bg); border:1px solid var(--line); margin-bottom:10px; }
+  .camimg { display:block; width:100%; height:auto; }
+  .camstamp { position:absolute; left:0; right:0; bottom:0; padding:5px 8px; font-size:11px;
+              color:#fff; background:linear-gradient(transparent, rgba(20,19,14,.72)); }
+  .camempty { font-size:12px; color:var(--dim); padding:14px 0; }
+  #gallery { position:fixed; inset:0; z-index:70; background:rgba(20,19,14,.6);
+             display:none; align-items:center; justify-content:center; padding:12px; }
+  #gallery.on { display:flex; }
+  #gallery .inner { background:var(--card); border-radius:14px; width:100%; max-width:960px;
+                    max-height:90vh; display:flex; flex-direction:column; overflow:hidden; }
+  #gallery .bar { display:flex; align-items:center; gap:10px; padding:12px;
+                  border-bottom:1px solid var(--line); font-size:14px; font-weight:700; }
+  #gallery .bar button { margin-left:auto; border:0; background:none; font-size:22px;
+                         cursor:pointer; color:var(--dim); }
+  #galstrip { overflow:auto; padding:12px; display:grid; gap:10px;
+              grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+  #galstrip figure { margin:0; cursor:pointer; }
+  #galstrip img { width:100%; border-radius:8px; display:block; border:1px solid var(--line); }
+  #galstrip figcaption { font-size:10px; color:var(--dim); margin-top:3px; }
   table { width:100%; border-collapse:collapse; }
   td { padding:4px 0; font-size:13px; border-bottom:1px solid var(--line); }
   td.var { color:var(--dim); font-family:'JetBrains Mono',monospace; font-size:11px; }
@@ -380,6 +424,10 @@ if (isset($_GET['history'])) {
 </script>
 <?php endif; ?>
 <div class="grid" id="grid"></div>
+<div id="gallery"><div class="inner">
+  <div class="bar"><span id="galtitle"></span><button onclick="closeGallery()" aria-label="Close">&times;</button></div>
+  <div id="galstrip"></div>
+</div></div>
 <div id="toast"></div>
 <?php if ($customer) or_bottom_nav('sensors'); ?>
 <div id="installbar"></div>
@@ -991,6 +1039,81 @@ function auxBtns(d) {
   }).join('');
 }
 
+// ---- camera card ----
+// One picture, when it arrived, and a way to ask for another. Tapping the image
+// opens the gallery; the frame itself is fetched through snapshot.php so the
+// snapshots directory can stay closed to the web server.
+function cameraBody(d) {
+  const snap = d.last_snapshot;
+  const busy = snapPending.has(d.slug);
+  if (!snap) {
+    return `<div class="camempty">No picture yet. The camera sends one when it is
+              powered up and claimed.</div>`
+         + cameraBtns(d, busy);
+  }
+  const src = `snapshot.php?device=${encodeURIComponent(d.slug)}&file=${encodeURIComponent(snap.filename)}&thumb=1`;
+  return `<div class="camwrap" onclick="openGallery('${d.slug}')">
+            <img class="camimg" src="${src}" alt="latest snapshot from ${d.name}" loading="lazy">
+            <div class="camstamp">${ago(snap.taken)}</div>
+          </div>` + cameraBtns(d, busy);
+}
+
+function cameraBtns(d, busy) {
+  if (!d.enabled || d.is_mirrored) {
+    return d.is_mirrored
+      ? `<div class="viewonlynote"><span class="lock">&#128274;</span>mirrored &mdash; read only</div>`
+      : '';
+  }
+  return `<div class="btns">
+    <button class="on"${busy ? ' disabled' : ''} onclick="takePhoto('${d.slug}')">
+      ${busy ? 'ASKING…' : 'TAKE PHOTO'}</button>
+    <button class="off" onclick="openGallery('${d.slug}')">GALLERY</button></div>`;
+}
+
+const snapPending = new Set();
+
+// Queues command 6. The camera picks it up on its next poll and answers with an
+// upload, so the button reports "asked", never "taken" -- the picture arrives
+// when the camera next wakes, which may be seconds or a whole poll interval.
+async function takePhoto(slug) {
+  if (snapPending.has(slug)) return;
+  snapPending.add(slug); render(lastDevices);
+  try {
+    const body = new URLSearchParams({ slug: slug, cmd: '6' });
+    if (!IS_CUSTOMER) body.set('pin', pin());
+    const r = await fetch('cmd.php', { method: 'POST', body });
+    const j = await r.json();
+    toast(j.error ? 'Error: ' + j.error : 'Asked ' + slug + ' for a photo');
+  } catch (e) {
+    toast('Error: ' + e.message);
+  }
+  setTimeout(() => { snapPending.delete(slug); refresh(); }, 4000);
+}
+
+// ---- gallery ----
+async function openGallery(slug) {
+  const box = document.getElementById('gallery');
+  const strip = document.getElementById('galstrip');
+  document.getElementById('galtitle').textContent = slug;
+  strip.innerHTML = '<div class="camempty">loading…</div>';
+  box.classList.add('on');
+  try {
+    const r = await fetch(`snapshot.php?device=${encodeURIComponent(slug)}&list=1&limit=60`);
+    const j = await r.json();
+    if (!j.snapshots || !j.snapshots.length) {
+      strip.innerHTML = '<div class="camempty">Nothing stored yet.</div>'; return;
+    }
+    strip.innerHTML = j.snapshots.map(s => `
+      <figure onclick="window.open('snapshot.php?device=${encodeURIComponent(slug)}&file=${encodeURIComponent(s.file)}','_blank')">
+        <img loading="lazy" src="snapshot.php?device=${encodeURIComponent(slug)}&file=${encodeURIComponent(s.file)}&thumb=1" alt="">
+        <figcaption>${ago(s.taken)}${s.source === 'manual' ? ' · asked for' : ''}${s.source === 'mirror' ? ' · mirrored' : ''}</figcaption>
+      </figure>`).join('');
+  } catch (e) {
+    strip.innerHTML = '<div class="camempty">Could not load the gallery.</div>';
+  }
+}
+function closeGallery() { document.getElementById('gallery').classList.remove('on'); }
+
 // ---- flow meter card ----
 // Only charts variables the device actually declares — tapping one it never
 // reports would just come back 404 from ?history=1.
@@ -1090,7 +1213,8 @@ function render(devices) {
     // underneath rather than printed twice. Everything else the device reports
     // still gets its row.
     let body;
-    if (flow)       body = flowBody(d, lowFlow);
+    if (d.is_camera) body = cameraBody(d);
+    else if (flow)  body = flowBody(d, lowFlow);
     else if (gauge) body = gaugeBlock(d, th, al) + tableFor(d, d.variables.filter(v => v !== th.variable));
     else            body = tableFor(d, d.variables);
 
@@ -1099,7 +1223,7 @@ function render(devices) {
       <div class="notes">${d.notes}</div>
       ${body}
       <div class="seen">last seen: ${d.enabled ? ago(d.last_seen) : 'template shell'}</div>
-      ${flow ? flowBtns(d) : genericBtns(d)}
+      ${d.is_camera ? '' : (flow ? flowBtns(d) : genericBtns(d))}
       ${th ? thEditor(d, th) : ''}`;
     grid.appendChild(card);
   }

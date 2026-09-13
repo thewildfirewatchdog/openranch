@@ -219,3 +219,102 @@ void reportAndPoll() {
 | Card shows STALE | No data for `3 x expected_interval`; check the board or raise the interval |
 | Variable missing from the card | Not declared in `variables` |
 | Buttons don't appear | Device has `commandable = 0` |
+
+---
+
+## Cameras
+
+A camera is an ordinary OpenRanch device — same registration, same claim code,
+same token, same `poll.php` — that uploads JPEGs instead of readings.
+
+### Registering
+
+Add `"camera": 1` to the usual `register.php` body. Cameras are forced
+commandable, because that is how "take a photo" reaches them.
+
+```bash
+curl -X POST https://dashboard.example.com/register.php \
+  -H 'Provision-Key: REPLACE_WITH_PROVISION_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{"mac":"AA:BB:CC:DD:EE:FF","name":"Stock Tank Camera",
+       "variables":"snapshot,rssi","camera":1,"interval":300}'
+```
+
+```json
+{"status":"created","slug":"stock_tank_camera_eeff","token":"...",
+ "camera":true,"claim_code":"7QK4WM","claimed":false,"note":"..."}
+```
+
+The owner claims it exactly like any other device, and it is named "Camera".
+
+### Uploading a picture
+
+```
+POST /cam_upload.php
+Header:  Device-Token: <token>
+Body:    the JPEG bytes (Content-Type: image/jpeg)
+```
+
+`multipart/form-data` with the file in a field named `image` also works, for
+libraries that only do multipart.
+
+```json
+{"status":"stored","file":"20260913-173234.jpg","bytes":48211,"answered_request":0}
+```
+
+| Field | Meaning |
+|---|---|
+| `file` | the stored name, `YYYYMMDD-HHMMSS[-manual].jpg`, UTC |
+| `bytes` | what was stored |
+| `answered_request` | `1` if this upload satisfied a pending "take photo" |
+
+Add `?source=manual` when the upload is answering a snapshot request; it tags
+the frame in the gallery.
+
+Rejections: `401` bad or missing token, `403` not claimed / not a camera /
+mirrored, `400` not a JPEG (the magic bytes are checked, not the header),
+`413` over 3 MB.
+
+### Being asked for a picture
+
+The dashboard queues **command 6** in the same `commands` table relays use. The
+camera sees it on its normal poll:
+
+```
+GET /poll.php
+Header:  Device-Token: <token>
+```
+
+```json
+{"cmd":6,"value":6}
+```
+
+`6` means *take a picture now and upload it*. Codes `0`–`5` keep their existing
+relay meanings, so a board that handles both reads one endpoint.
+
+The request is cleared by the upload that answers it — `cam_upload.php` writes a
+`0` once it has the frame — so a camera must not treat `6` as a standing
+instruction. Poll, see `6`, upload once, carry on.
+
+### A minimal loop
+
+```
+every INTERVAL seconds:
+    capture frame
+    POST /cam_upload.php with Device-Token
+between uploads, every ~10s:
+    GET /poll.php
+    if cmd == 6:
+        capture frame
+        POST /cam_upload.php?source=manual
+```
+
+`expected_interval` at registration should be your upload period in seconds; the
+dashboard marks the camera stale at 3× that (minimum 15 minutes).
+
+### Retention
+
+Frames are kept for as long as the owner's plan allows — 7 days free, 90 days
+pro — and are pruned nightly along with readings. Roughly one upload in fifty
+also tidies up that camera's own old frames, so a busy camera does not depend on
+the cron to stay bounded.

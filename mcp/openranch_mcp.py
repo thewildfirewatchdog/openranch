@@ -138,6 +138,54 @@ def ranch_summary(api_token: str, hours: int = 24) -> dict:
     return call("GET", "summary", api_token, hours=hours)
 
 
+@mcp.tool
+def list_cameras(api_token: str) -> dict:
+    """The customer's cameras and the newest picture each one has.
+
+    `latest.url` is a link the caller can fetch with the same api_token as a
+    Bearer header; `latest.taken` says when it was taken, in UTC.
+    """
+    return call("GET", "cameras", api_token)
+
+
+@mcp.tool
+def get_latest_snapshot(api_token: str, camera: str = "") -> dict:
+    """The most recent picture from one camera, or from the only camera if the
+    account has just one. Use this for "show me the stock tank".
+
+    Returns the picture's URL and when it was taken. Say how old it is if it is
+    not recent -- a stale photo presented as current is worse than none.
+    """
+    r = call("GET", "cameras", api_token)
+    cams = r.get("cameras") or []
+    if r.get("error"):
+        return r
+    if not cams:
+        return {"error": "this account has no cameras"}
+    if camera:
+        want = camera.strip().lower()
+        cams = [c for c in cams
+                if want in (c["slug"].lower(), c["name"].lower())
+                or want in c["name"].lower()]
+        if not cams:
+            return {"error": f"no camera matching {camera!r} on this account"}
+    c = cams[0]
+    if not c.get("latest"):
+        return {"camera": c["name"], "error": "that camera has not sent a picture yet"}
+    return {"camera": c["name"], "slug": c["slug"], **c["latest"]}
+
+
+@mcp.tool
+def request_snapshot(api_token: str, camera: str) -> dict:
+    """Ask a camera to take a fresh picture now. ACTION: confirm first.
+
+    The camera takes it on its next poll, so the picture is not instant. After
+    calling this, tell the customer it has been asked for -- the assistant
+    watches for the new frame and sends it when it lands.
+    """
+    return call("POST", "cameras/request", api_token, camera=camera)
+
+
 # ------------------------------------------------------------ write tools ----
 # These change the physical world. The assistant's system prompt requires it to
 # confirm with the customer before calling any of them.
@@ -210,6 +258,7 @@ def delete_rule(api_token: str, rule_id: int) -> dict:
 ACTION_TOOLS = {
     "start_zone", "stop_zone", "stop_all_zones", "run_program_once",
     "set_rain_delay", "add_notification_rule", "delete_rule",
+    "request_snapshot",
 }
 
 

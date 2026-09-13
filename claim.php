@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   } else {
     $stmt = db()->prepare(
-      'SELECT id, slug, name, variables, customer_id, ' . claim_mirror_col(db()) .
+      'SELECT id, slug, name, variables, customer_id, is_camera, ' . claim_mirror_col(db()) .
       '  FROM devices WHERE claim_code = ?');
     $stmt->execute([$code]);
     $dev = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($dev['customer_id'] !== null) {
       $error = 'That code has already been used. Each code claims one device once.';
     } else {
-      $label = claim_type_label($dev['variables']);
+      $label = claim_type_label($dev['variables'], !empty($dev['is_camera']));
       $name  = claim_unique_name(db(), $customer['id'], $label);
 
       // One statement, and it re-checks the two things that could have changed

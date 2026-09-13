@@ -579,6 +579,48 @@ count of why anything was skipped. Opt in on the same page.
 0 7 1 * * www-data /usr/bin/php /var/www/openranch/monthly_report.php
 ```
 
+## Cameras
+
+A camera is a first-class device type: it registers, gets a claim code and is
+claimed exactly like a sensor, but it uploads JPEGs instead of readings.
+
+```
+ESP32-CAM ──▶ cam_upload.php ──▶ snapshots/<slug>/YYYYMMDD-HHMMSS.jpg
+                                 + one row in `snapshots`
+dashboard ──▶ commands (cmd 6) ──▶ poll.php ──▶ camera takes a picture
+```
+
+**Authentication is the device's own token**, the same one `ingest.php` uses —
+there is no shared camera key, so a leaked credential is one camera and is
+fixed by regenerating that device's token in `admin.php`.
+
+The dashboard draws a camera card with the latest picture and how old it is; tap
+it for a gallery of everything still retained. **Take photo** queues command 6,
+which the camera picks up on its next poll — the button says "asked", never
+"taken", because the picture arrives when the camera next wakes.
+
+Files live under `snapshots/<device-slug>/` and are **not** web-readable: nginx
+denies the directory and every image is served through `snapshot.php`, which
+checks the session, an API token or a share token first. Retention follows the
+plan (7 days free, 90 pro) and deletes rows and files together.
+
+Firmware details, the upload contract and the poll loop:
+[docs/firmware-payload.md](docs/firmware-payload.md#cameras).
+
+### From the assistant
+
+`get_latest_snapshot` answers "show me the stock tank" with the picture itself;
+`request_snapshot` asks for a fresh one, confirms first like any other action,
+and waits up to 60 seconds for the frame to land before sending it on. Cameras
+also appear in the morning briefing, one current picture each.
+
+### Mirrored cameras
+
+`cam_mirror.php` can copy another install's latest frame in read-only, on a
+schedule, so it appears alongside mirrored sensors. It only ever opens the
+source for reading, skips unchanged frames, and the mirrored device refuses
+uploads and carries no controls.
+
 ## How a device posts readings
 
 `POST /ingest.php` with a `Device-Token` header. Two body shapes are accepted:
@@ -668,6 +710,10 @@ claim_lib.php        claim codes, sensor-type naming, free-tier counting
 signup.php           customer self-signup
 controls.php         phone-first Controls screen
 graphs.php           per-device charts + the series endpoint
+cam_upload.php       camera snapshot upload (device token)
+snapshot.php         serves stored frames + the gallery index
+camera_lib.php       snapshot storage, retention and helpers
+cam_mirror.php       read-only copy of another install's camera
 integrations.php     MQTT, share link, CSV export, monthly email
 status.php           the public /s/<token> status page
 export.php           CSV export
@@ -704,6 +750,7 @@ migrate_master_lead.sql adds the master valve lead columns
 migrate_controls.sql    adds the per-zone tap duration
 migrate_bot.sql         adds API tokens + Telegram linking
 migrate_mqtt.sql        adds MQTT access, share links, monthly email
+migrate_camera.sql      adds cameras + the snapshots table
 api/v1/index.php        the assistant API (see docs/api-v1.md)
 assistant.php           API token, link code and assistant preferences
 bot/                    Telegram assistant + morning briefing + systemd units

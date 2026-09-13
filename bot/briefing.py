@@ -23,7 +23,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from openranch_bot import (API_BASE, BOT_SECRET, ENV, MODEL, dash,  # noqa: E402
-                           synthesize)
+                           fetch_photo, synthesize)
 
 logging.basicConfig(format="%(asctime)s %(levelname)s %(message)s", level=logging.INFO)
 log = logging.getLogger("briefing")
@@ -44,6 +44,7 @@ Cover, only where the data actually says something:
 - anything that did not water, and the reason in plain words
 - devices that have not reported for more than 12 hours
 - today's weather decision, if one was made
+- whether each camera has a recent picture (the pictures are sent with this)
 
 Use "notification", "limit" and "automation" rather than alert, threshold or
 rule. Never invent a number. If nothing happened, say so in one sentence rather
@@ -67,9 +68,27 @@ def write_briefing(data: dict, name: str) -> str:
     return "".join(b.text for b in resp.content if b.type == "text").strip()
 
 
-def send(chat_id: int, text: str, voice: bool) -> bool:
+def cameras_for(token: str) -> list[dict]:
+    try:
+        r = requests.get(f"{API_BASE.rstrip('/')}/cameras",
+                         headers={"Authorization": f"Bearer {token}"}, timeout=25)
+        return r.json().get("cameras") or []
+    except Exception:                                          # noqa: BLE001
+        return []
+
+
+def send(chat_id: int, text: str, voice: bool, photos: list | None = None) -> bool:
     ok = requests.post(f"{TELEGRAM}/sendMessage",
                        json={"chat_id": chat_id, "text": text}, timeout=30).ok
+    # One picture per camera, so the briefing shows the place as well as
+    # describing it. Best effort: a camera that has not reported is skipped.
+    for img, caption in (photos or []):
+        try:
+            requests.post(f"{TELEGRAM}/sendPhoto",
+                          data={"chat_id": chat_id, "caption": caption[:1024]},
+                          files={"photo": ("snapshot.jpg", img, "image/jpeg")}, timeout=60)
+        except Exception as e:                                 # noqa: BLE001
+            log.warning("briefing photo failed: %s", e)
     if ok and voice:
         audio = synthesize(text)
         if audio:
@@ -100,6 +119,11 @@ def main() -> int:
         who = c.get("name") or c["email"]
         try:
             data = summary_for(c["api_token"])
+            cams = cameras_for(c["api_token"])
+            if cams:
+                data["cameras"] = [{"name": x["name"],
+                                    "latest_picture_taken": (x.get("latest") or {}).get("taken")}
+                                   for x in cams]
             if data.get("error"):
                 log.warning("%s: %s", who, data["error"])
                 rc = 1
@@ -110,7 +134,16 @@ def main() -> int:
                 continue
             prefs = dash("resolve", chat_id=int(c["telegram_chat_id"]))
             voice = prefs.get("customer", {}).get("voice", True)
-            if send(int(c["telegram_chat_id"]), text, voice):
+
+            photos = []
+            for cam in cameras_for(c["api_token"]):
+                if not cam.get("latest"):
+                    continue
+                img = fetch_photo(cam["latest"]["url"], c["api_token"])
+                if img:
+                    photos.append((img, f"{cam['name']} — {cam['latest']['taken']} UTC"))
+
+            if send(int(c["telegram_chat_id"]), text, voice, photos):
                 log.info("briefed %s", who)
             else:
                 log.warning("could not deliver to %s", who)

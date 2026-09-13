@@ -33,6 +33,7 @@ require_once __DIR__ . '/../../irrigation_lib.php';
 // mirrored-row filter below silently no-ops and every account sees
 // mirrored hardware, so this require is load-bearing, not cosmetic.
 require_once __DIR__ . '/../../claim_lib.php';
+require_once __DIR__ . '/../../camera_lib.php';
 
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
@@ -399,6 +400,39 @@ case 'POST rules/delete':
   $st->execute([(int)arg('rule_id', 0), $cid]);
   if (!$st->rowCount()) fail('no such automation on this account', 404);
   out(['status' => 'deleted']);
+
+case 'GET cameras':
+  $cams = [];
+  foreach (cam_devices($db, $cid) as $d) {
+    if (!empty($d['is_mirrored']) && !$isAdmin) continue;
+    $latest = cam_latest($db, $d['id']);
+    $cams[] = [
+      'slug' => $d['slug'], 'name' => $d['name'], 'enabled' => (bool)$d['enabled'],
+      'mirrored' => (bool)($d['is_mirrored'] ?? 0),
+      'latest' => $latest ? [
+        'file' => $latest['filename'], 'taken' => $latest['taken'],
+        'source' => $latest['source'],
+        'url' => (defined('BASE_URL') ? rtrim(BASE_URL, '/') : '')
+               . '/snapshot.php?device=' . rawurlencode($d['slug'])
+               . '&file=' . rawurlencode($latest['filename']),
+      ] : null,
+    ];
+  }
+  out(['cameras' => $cams, 'count' => count($cams)]);
+
+case 'POST cameras/request':
+  $q = $db->prepare('SELECT * FROM devices WHERE slug = ? AND customer_id = ? AND is_camera = 1');
+  $q->execute([(string)arg('camera', ''), $cid]);
+  $d = $q->fetch(PDO::FETCH_ASSOC);
+  if (!$d)                        fail('no such camera on this account', 404);
+  if (!$d['enabled'])             fail('that camera is switched off', 409);
+  if (!empty($d['is_mirrored']))  fail('that camera is mirrored and is read-only here', 409);
+  $before = cam_latest($db, $d['id']);
+  $db->prepare('INSERT INTO commands (device_id, cmd) VALUES (?, ?)')
+     ->execute([$d['id'], CAM_CMD_SNAPSHOT]);
+  out(['status' => 'requested', 'camera' => $d['slug'],
+       'note' => 'The camera takes the picture on its next poll; fetch cameras again to see it.',
+       'previous' => $before['filename'] ?? null]);
 
 case 'GET notifications':
   $hours = max(1, min(720, (int)arg('hours', 24)));

@@ -76,7 +76,12 @@ claude = anthropic.Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
 ACTION_TOOLS = {
     "start_zone", "stop_zone", "stop_all_zones", "run_program_once",
     "set_rain_delay", "add_notification_rule", "delete_rule",
+    "request_snapshot",
 }
+
+# Tools whose result carries a picture the customer should actually see, rather
+# than a URL for the model to describe.
+PHOTO_TOOLS = {"get_latest_snapshot"}
 
 SYSTEM = """You are the OpenRanch assistant. You help one person look after their
 own ranch hardware over Telegram: sensors, irrigation zones, watering programs
@@ -101,6 +106,14 @@ Before you act:
   and ask them to confirm. Buttons appear under your message. Then stop -- do
   not call the tool again, and do not claim it is done. Only their yes runs it.
 - Read-only questions need no permission; just answer them.
+
+Pictures:
+- When someone asks to see something, call get_latest_snapshot. The picture is
+  sent to them automatically -- do not paste the URL. Say what it shows and how
+  old it is, and if it is not recent, say so plainly.
+- "Take a picture" means request_snapshot. It is confirmed like any other
+  action, the camera takes it on its next poll, and the new picture is sent on
+  as soon as it lands.
 
 Limits:
 - You can only see this customer's own devices. If asked about anything else,
@@ -207,6 +220,7 @@ class Chat:
         self.history: deque = deque(maxlen=MAX_TURNS * 2)
         self.pending: tuple[str, dict, float] | None = None   # tool, args, when
         self.voice_default = False
+        self.photos: list[tuple[bytes, str]] = []             # (jpeg, caption)
 
 
 CHATS: dict[int, Chat] = {}
@@ -279,10 +293,82 @@ async def execute_tool(chat_id: int, token: str, name: str, args: dict) -> str:
             })
         st.pending = None                                   # single use
     try:
-        return await TOOLS.call(name, args, token)
+        out = await TOOLS.call(name, args, token)
     except Exception as e:                                   # noqa: BLE001
         log.exception("tool %s failed", name)
         return json.dumps({"error": f"{type(e).__name__}: {e}"})
+
+    # A picture is worth sending, not describing. Grab the bytes now and let the
+    # handler attach them; the model still gets the JSON so it can talk about it.
+    if name in PHOTO_TOOLS:
+        try:
+            j = json.loads(out)
+            if j.get("url"):
+                img = await asyncio.to_thread(fetch_photo, j["url"], token)
+                if img:
+                    st.photos.append((img, f"{j.get('camera', 'Camera')} — {j.get('taken', '')} UTC"))
+        except Exception:                                     # noqa: BLE001
+            log.exception("photo attach failed")
+
+    # A requested snapshot is worth waiting for, within reason.
+    if name == "request_snapshot":
+        try:
+            j = json.loads(out)
+            if j.get("status") == "requested":
+                img, taken = await asyncio.to_thread(
+                    wait_for_new_snapshot, token, j["camera"], j.get("previous"), 60)
+                if img:
+                    st.photos.append((img, f"{j['camera']} — new picture, {taken} UTC"))
+                    out = json.dumps({**j, "arrived": True, "taken": taken})
+                else:
+                    out = json.dumps({**j, "arrived": False,
+                                      "note": "No new picture within 60 seconds; the camera may poll less often."})
+        except Exception:                                     # noqa: BLE001
+            log.exception("snapshot wait failed")
+    return out
+
+
+# -------------------------------------------------------------- photos -----
+def fetch_photo(url: str, token: str) -> bytes | None:
+    """Pull a snapshot using the customer's own token, so the bot can never
+    reach an image the customer could not."""
+    try:
+        r = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=25)
+        if r.ok and r.content[:2] == b"\xff\xd8":
+            return r.content
+        log.warning("snapshot fetch %s -> %s", url, r.status_code)
+    except requests.RequestException as e:
+        log.warning("snapshot fetch failed: %s", e)
+    return None
+
+
+def wait_for_new_snapshot(token: str, slug: str, previous: str | None,
+                          timeout: int = 60) -> tuple[bytes | None, str | None]:
+    """Poll for a frame newer than `previous`, up to `timeout` seconds.
+
+    A camera answers a request on its next poll, which is usually seconds but is
+    bounded by its own interval -- so this waits rather than promising a picture
+    that has not arrived.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = dash_get("cameras", token)
+        for c in (r.get("cameras") or []):
+            if c["slug"] != slug or not c.get("latest"):
+                continue
+            if c["latest"]["file"] != previous:
+                return fetch_photo(c["latest"]["url"], token), c["latest"]["taken"]
+        time.sleep(4)
+    return None, None
+
+
+def dash_get(endpoint: str, token: str) -> dict:
+    try:
+        r = requests.get(f"{API_BASE.rstrip('/')}/{endpoint}",
+                         headers={"Authorization": f"Bearer {token}"}, timeout=20)
+        return r.json()
+    except Exception as e:                                    # noqa: BLE001
+        return {"error": str(e)}
 
 
 # --------------------------------------------------------------- voice -----
@@ -505,8 +591,15 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def reply(ctx, chat_id, msg, text, was_voice, cust, markup=None) -> None:
-    """Text always. A voice note too when the customer wants one -- on by
-    default for a spoken question, off by default for a typed one."""
+    """Text always. Any pictures the turn produced. A voice note too when the
+    customer wants one -- on by default for a spoken question, off for typed."""
+    st = chat_state(chat_id)
+    photos, st.photos = st.photos, []
+    for img, caption in photos:
+        try:
+            await ctx.bot.send_photo(chat_id, img, caption=caption[:1024])
+        except Exception as e:                                # noqa: BLE001
+            log.warning("send_photo failed: %s", e)
     if not text:
         return
     await msg.reply_text(text, reply_markup=markup)

@@ -19,6 +19,7 @@
 
 require __DIR__ . '/config.php';
 require_once __DIR__ . '/claim_lib.php';
+require_once __DIR__ . '/camera_lib.php';
 
 $dry     = in_array('--dry-run', $argv ?? [], true);
 $verbose = $dry || in_array('-v', $argv ?? [], true);
@@ -68,6 +69,20 @@ foreach ($cs as $c) {
     }
     $forCustomer += $n;
   }
+  // Snapshots follow the same allowance. Files and rows go together, so a
+  // pruned frame cannot linger on disk with no index entry pointing at it.
+  $snapGone = 0;
+  foreach ($devices as $d) {
+    $isCam = $db->prepare('SELECT is_camera FROM devices WHERE id = ?');
+    $isCam->execute([$d['id']]);
+    if (!$isCam->fetchColumn()) continue;
+    $snapGone += cam_prune($db, $d['id'], $d['slug'], $days, $dry);
+  }
+  if ($snapGone) {
+    vlog(sprintf('  customer %d: %s %d snapshot(s)', $c['id'],
+         $dry ? 'would remove' : 'removed', $snapGone));
+  }
+
   $totalDeleted += $forCustomer;
   if ($forCustomer) {
     vlog(sprintf('  customer %d (%s, %s, %dd): %s %d reading(s) across %d device(s)',
