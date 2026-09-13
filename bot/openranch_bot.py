@@ -22,6 +22,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -472,9 +473,19 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_link(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
-    code = (ctx.args[0] if ctx.args else "").strip().upper()
+    # Normalise the same way the dashboard does, so punctuation someone added
+    # while reading the code aloud is forgiven -- and so a wrong-length code is
+    # caught here, in words the customer can act on, rather than coming back
+    # from the API as a sentence about required fields.
+    code = re.sub(r"[^A-Za-z0-9]", "", (ctx.args[0] if ctx.args else "")).upper()
     if not code:
         await update.message.reply_text("Send it like this:  /link ABC234")
+        return
+    if len(code) != 6:
+        await update.message.reply_text(
+            "That doesn't look like a link code — it's 6 characters. Open the "
+            "dashboard, go to More → Telegram assistant, and it shows you the "
+            "whole message to send, like:  /link ABC234")
         return
     try:
         r = requests.post(f"{API_BASE.rstrip('/')}/link",

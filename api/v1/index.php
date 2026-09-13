@@ -68,7 +68,16 @@ $db = db();
 if ($path === 'link' && $method === 'POST') {
   $code = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string)arg('code', '')));
   $chat = (int)arg('chat_id', 0);
-  if (strlen($code) !== 6 || !$chat) fail('code and chat_id are required', 400);
+  // Two unrelated failures used to share one message: a client that left a
+  // field out, and a customer who typed something that is not a code. The
+  // second is by far the common one -- "/link <code>" normalises to CODE --
+  // and "code and chat_id are required" reads to them as if the bot is broken,
+  // so each case says what is actually wrong. These strings reach the customer
+  // verbatim: the bot echoes whatever comes back here.
+  if (!$chat)              fail('chat_id is required', 400);
+  if ($code === '')        fail('Send the code with the command, like /link ABC234.', 400);
+  if (strlen($code) !== 6) fail('A link code is 6 characters, like ABC234. '
+                              . 'Open the assistant page on the dashboard to see yours.', 400);
 
   $q = $db->prepare('SELECT id, email, name FROM customers
                       WHERE link_code = ? AND (link_expires IS NULL OR link_expires > NOW())');

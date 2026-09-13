@@ -73,15 +73,23 @@ irr_msg();
       <input type="hidden" name="act" value="unlink">
       <button class="danger" type="submit">Unlink this chat</button></form>
   <?php else: ?>
-    <p style="font-size:13px;color:var(--dim)">
-      Open Telegram, start a chat with the OpenRanch bot, and send it
-      <b>/link &lt;code&gt;</b> using the code below.</p>
     <?php if ($codeLive): ?>
-      <div style="font-family:'JetBrains Mono',monospace; font-size:30px; letter-spacing:.3em;
+      <!-- Never show a "/link <code>" placeholder here. People send it exactly as
+           written; <code> normalises to CODE, which is not 6 characters, and the
+           dashboard rejects it. Print the whole command with the real code in it
+           so there is nothing left to substitute. -->
+      <p style="font-size:13px;color:var(--dim)">
+        Open Telegram, start a chat with the OpenRanch bot, and send it this,
+        exactly as it appears:</p>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:30px; letter-spacing:.12em;
                   text-align:center; padding:16px; background:var(--bg); border:1px solid var(--line);
-                  border-radius:10px; margin:12px 0"><?= htmlspecialchars($a['link_code']) ?></div>
+                  border-radius:10px; margin:12px 0">/link <?= htmlspecialchars($a['link_code']) ?></div>
       <div style="font-size:11px;color:var(--dim);text-align:center">
         Expires <?= htmlspecialchars($a['link_expires']) ?> UTC. One use only.</div>
+    <?php else: ?>
+      <p style="font-size:13px;color:var(--dim)">
+        Open Telegram and start a chat with the OpenRanch bot, then get a code
+        below &mdash; it comes with the exact message to send.</p>
     <?php endif; ?>
     <form method="post" class="actions">
       <input type="hidden" name="act" value="code">
