@@ -27,6 +27,7 @@
 
 require 'config.php';
 require_once 'thresholds_lib.php';
+require_once 'irrigation_lib.php';
 or_session_resume();
 $customer = current_customer();
 
@@ -166,6 +167,9 @@ if (isset($_GET['history'])) {
   .who b { color:var(--text); font-weight:500; }
   .who a { color:var(--accent); text-decoration:none; margin-left:10px; }
   .who a:hover { text-decoration:underline; }
+  .irrmsg { padding:9px 12px; border-radius:8px; font-size:13px; margin-bottom:12px; }
+  .irrmsg.good { background:rgba(63,98,18,.10); border:1px solid rgba(63,98,18,.45); color:var(--green); }
+  .irrmsg.bad  { background:rgba(179,38,30,.10); border:1px solid rgba(179,38,30,.45); color:var(--red); }
   /* Adding a device is the one action a new account needs, so it reads as a
      button rather than sitting in the row of plain links beside it. */
   .who a.addbtn { background:var(--accent); color:#3a2205; font-weight:700;
@@ -353,6 +357,11 @@ if (isset($_GET['history'])) {
     <?php endif; ?>
   </div>
 </header>
+<?php if ($customer): ?>
+  <?php if (!empty($_GET['ok'])):  ?><div class="irrmsg good"><?= htmlspecialchars($_GET['ok'])  ?></div><?php endif; ?>
+  <?php if (!empty($_GET['err'])): ?><div class="irrmsg bad"><?=  htmlspecialchars($_GET['err']) ?></div><?php endif; ?>
+  <?php include __DIR__ . '/irrigation_panel.php'; ?>
+<?php endif; ?>
 <div class="grid" id="grid"></div>
 <div id="toast"></div>
 <div id="installbar"></div>

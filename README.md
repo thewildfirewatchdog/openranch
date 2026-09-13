@@ -255,6 +255,106 @@ it leaves existing rows alone: current devices keep `claim_code NULL` and every
 existing customer lands on `free`. Boards already in the field get a code the
 next time they re-register.
 
+## Irrigation & automations
+
+Optional. An install that does not irrigate never writes to any of it.
+
+The scheduler drives hardware by writing the same `commands` rows the dashboard
+buttons write, so **no firmware change is needed** -- `poll.php` hands a board
+its latest command exactly as before.
+
+### Zones
+
+A zone is one output device (`commandable = 1`) plus, optionally, a flow meter
+and a soil probe. The open/close codes are per zone, so a board that uses
+something other than 1/0 still works.
+
+One zone per customer can be the **master valve**. It opens before any other
+zone opens and closes only once every other zone has closed.
+
+### Programs
+
+A program has start times (`HH:MM`, local), either chosen weekdays or an
+every-N-days interval, a per-zone duration, a seasonal adjustment %, and a
+sequential/parallel flag. Sequential runs one zone at a time; parallel opens
+them together.
+
+Start times are read in `IRRIGATION_TZ`, not the host clock -- 06:00 means six
+in the morning where the valves are.
+
+Install the cron:
+
+```cron
+* * * * * www-data /usr/bin/php /var/www/openranch/irrigation_cron.php
+```
+
+Each tick fires due programs, stops runs that have reached their end, starts
+what is queued, checks for unscheduled flow, and evaluates automations. A start
+slot is claimed in `irr_fires` before anything opens, so a restart inside the
+same minute cannot water twice.
+
+### Skips
+
+A program can decline to run, and always says why in the log:
+
+| Reason | When |
+|---|---|
+| `soil` | the zone's probe reads at or above its limit |
+| `rain` | more than `rain_skip_mm` fell in the last 24h |
+| `forecast` | more than `rain_skip_mm` is forecast today |
+| `delay` | a rain delay is in force |
+| `zero` | seasonal % and weather scaled the run to nothing |
+
+Weather comes from [Open-Meteo](https://open-meteo.com/) (no key needed) for the
+customer's lat/lon, or a zip geocoded once. **One request per customer per
+hour**, cached in `irr_settings`. A failed fetch keeps the previous cache rather
+than treating "no answer" as "no rain".
+
+The default rule: skip if either yesterday's rain or today's forecast exceeds
+the limit; otherwise scale the run by temperature around a baseline, clamped to
+0.5x-1.5x. Both numbers are per customer.
+
+A **missing** soil reading waters rather than skipping -- a dead probe should
+not quietly stop irrigation.
+
+### Unscheduled flow
+
+If a zone's meter reports flow above `leak_min_gpm` while that zone is closed,
+for longer than `leak_minutes`, the customer gets one push notification per
+episode and a log entry. The state clears when the flow stops.
+
+### Automations
+
+`IF <device.metric> <op> <value> [held for N minutes] THEN <action>`, evaluated
+every minute. Actions are: send a notification, command a device, or start a
+zone for N minutes. Every action also notifies, so a rule that moved hardware is
+never silent. A cooldown stops a rule that stays true from firing every minute.
+
+### Logs
+
+Water use per run (start, end, and gallons differenced from the flow meter's
+running total) on the zones page, with a 14-day per-zone chart, plus the skip
+and automation log.
+
+### Upgrading an existing install
+
+```bash
+mysql openranch < migrate_irrigation.sql
+```
+
+Nine `irr_*` tables. Safe to run more than once; nothing outside those tables is
+touched.
+
+### Tests
+
+```bash
+php tests/irrigation_test.php
+```
+
+Covers the scheduling rules directly -- day and time matching, interval cycles,
+seasonal and weather scaling, the weather decision, soil limits, sequential vs
+parallel ordering, and gallon differencing. No database and no network.
+
 ## How a device posts readings
 
 `POST /ingest.php` with a `Device-Token` header. Two body shapes are accepted:
@@ -307,6 +407,7 @@ The ones you are most likely to change:
 | `FLOW_TZ` | Timezone for daily-chart day boundaries (readings are always stored UTC) |
 | `PROVISION_KEY` | Shared secret for self-registering boards |
 | `FREE_DEVICE_LIMIT` | Devices one customer may claim without a `'pro'` plan (default `3`) |
+| `IRRIGATION_TZ` | Zone the irrigation scheduler reads program start times in |
 | `VAPID_*` | Web Push keypair; leave empty to disable push and use email |
 | `ALERT_EMAIL` | Where outage notifications go |
 
@@ -340,6 +441,15 @@ register.php         device self-provisioning (mints the claim code)
 claim.php            customer claims a device with its code
 claim_lib.php        claim codes, sensor-type naming, free-tier counting
 signup.php           customer self-signup
+irrigation_cron.php  the scheduler; run once a minute
+irrigation_lib.php   scheduling rules, weather, automations (pure half is tested)
+irrigation_run.php   manual run / stop / hold actions
+irrigation_panel.php irrigation panel on the dashboard
+irrigation_ui.php    shared chrome for the irrigation pages
+zones.php            zones, water-use chart and logs
+programs.php         schedules and weather settings
+rules.php            automations
+tests/               unit tests for the scheduling logic
 cmd.php              dashboard -> command slot
 thresholds.php       threshold editor API
 thresholds_lib.php   threshold evaluation and hysteresis
@@ -352,6 +462,7 @@ login.php logout.php customer sessions
 sw.js pwa.js         service worker and install prompt
 schema.sql           complete database schema
 migrate_claim.sql    adds claim codes + plans to an existing install
+migrate_irrigation.sql  adds the irrigation tables to an existing install
 config.example.php   configuration template
 install.sh           installer
 ```

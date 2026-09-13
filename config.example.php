@@ -92,6 +92,14 @@ define('DEFAULT_PUMP_SLUG', 'example_pump');
 define('FREE_DEVICE_LIMIT', 3);
 
 // ---------------------------------------------------------------------------
+// Timezone the irrigation scheduler reads start times in. A program set to
+// water at 06:00 means six in the morning where the valves are, so this must be
+// the site's local zone rather than the host clock, which is usually UTC.
+// Falls back to FLOW_TZ, then UTC, if left undefined.
+// ---------------------------------------------------------------------------
+define('IRRIGATION_TZ', 'UTC');
+
+// ---------------------------------------------------------------------------
 // Auto-provisioning shared secret. Boards send this as the Provision-Key
 // header to register.php on first boot to claim a device row and receive their
 // own permanent token. Generate one with:
