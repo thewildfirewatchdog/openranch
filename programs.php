@@ -3,7 +3,7 @@
 require __DIR__ . '/config.php';
 require_once __DIR__ . '/irrigation_lib.php';
 require_once __DIR__ . '/irrigation_ui.php';
-ww_session_start();
+or_boot_session();
 
 $customer = current_customer();
 if (!$customer) { header('Location: login.php'); exit; }
@@ -70,7 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   if ($act === 'settings') {
     $db->prepare('UPDATE irr_settings SET zip=?, lat=?, lon=?, weather_enabled=?, rain_skip_mm=?,
-                    temp_baseline_c=?, temp_pct_per_c=?, leak_minutes=?, leak_min_gpm=?
+                    temp_baseline_c=?, temp_pct_per_c=?, leak_minutes=?, leak_min_gpm=?,
+                    master_lead_seconds=?
                   WHERE customer_id=?')
        ->execute([trim($_POST['zip'] ?? ''),
                   $_POST['lat'] === '' ? null : (float)$_POST['lat'],
@@ -78,7 +79,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   !empty($_POST['weather_enabled']) ? 1 : 0,
                   (float)$_POST['rain_skip_mm'], (float)$_POST['temp_baseline_c'],
                   (float)$_POST['temp_pct_per_c'], max(1,(int)$_POST['leak_minutes']),
-                  (float)$_POST['leak_min_gpm'], $cid]);
+                  (float)$_POST['leak_min_gpm'],
+                  max(0, min(600, (int)($_POST['master_lead_seconds'] ?? 15))), $cid]);
     // Location changed: drop the cached forecast so the next tick refetches.
     $db->prepare('UPDATE irr_settings SET weather_json=NULL, weather_at=NULL WHERE customer_id=?')->execute([$cid]);
     irr_back('programs.php', 'Settings saved.');
@@ -223,6 +225,14 @@ irr_msg();
       <div style="display:flex;align-items:flex-end">
         <label style="text-transform:none;letter-spacing:0;margin:0">
           <input type="checkbox" name="weather_enabled" value="1" style="width:auto" <?= $s['weather_enabled'] ? 'checked' : '' ?>> use weather</label></div>
+    </div>
+    <div class="row two">
+      <div><label>Master valve lead (seconds)</label>
+        <input name="master_lead_seconds" type="number" min="0" max="600"
+               value="<?= (int)($s['master_lead_seconds'] ?? 15) ?>">
+        <div style="font-size:11px;color:var(--dim);margin-top:4px">
+          The master opens this long before the first zone and closes this long
+          after the last. 0 turns the lead off.</div></div>
     </div>
     <div class="actions"><button type="submit">Save settings</button></div>
     <?php if ($s['weather_at']): $w = irr_weather_extract(json_decode($s['weather_json'], true)); ?>

@@ -7,6 +7,8 @@
 // scheduling rules directly. Callers (irrigation_cron.php and the UI pages)
 // require config.php themselves and pass db() in.
 
+require_once __DIR__ . '/session_compat.php';
+
 // ===========================================================================
 // Pure scheduling logic
 // ===========================================================================
@@ -140,6 +142,16 @@ function irr_soil_skip($latest, $threshold) {
   if ($threshold === null || $threshold === '') return false;
   if ($latest === null)                         return false;
   return (float)$latest >= (float)$threshold;
+}
+
+// Has a deadline arrived? Both halves of the master lead are stored as absolute
+// times -- irr_runs.start_after and irr_settings.master_close_after -- because a
+// deadline survives a restart and cannot drift the way "stamp plus duration"
+// recomputed each pass would. No deadline set means nothing to wait for.
+function irr_due($deadline, DateTimeInterface $now) {
+  if ($deadline === null || $deadline === '') return true;
+  $t = $deadline instanceof DateTimeInterface ? $deadline : new DateTimeImmutable($deadline);
+  return $t <= $now;
 }
 
 function irr_compare($a, $op, $b) {
@@ -390,6 +402,16 @@ function irr_stop_run(PDO $db, array $zone, array $run, $status = 'done') {
 // The master valve must be open whenever any other zone is, and shut when none
 // is. Only writes a command when the state actually needs to change, so a
 // per-minute cron does not fill the commands table with duplicates.
+// True when the last command written to the master's device was its open code.
+// The commands table is the only record of what we told the hardware, so it is
+// also how the scheduler knows whether a lead has already been served.
+function irr_master_is_open(PDO $db, array $master) {
+  $st = $db->prepare('SELECT cmd FROM commands WHERE device_id = ? ORDER BY id DESC LIMIT 1');
+  $st->execute([$master['device_id']]);
+  $last = $st->fetchColumn();
+  return $last !== false && (int)$last === (int)$master['cmd_on'];
+}
+
 function irr_ensure_master(PDO $db, $cid, $wantOpen) {
   $m = irr_master_zone($db, $cid);
   if (!$m) return;
@@ -398,6 +420,12 @@ function irr_ensure_master(PDO $db, $cid, $wantOpen) {
   $last = $st->fetchColumn();
   $want = $wantOpen ? (int)$m['cmd_on'] : (int)$m['cmd_off'];
   if ($last === false || (int)$last !== $want) irr_send_cmd($db, $m['device_id'], $want);
+}
+
+function irr_any_queued(PDO $db, $cid) {
+  $st = $db->prepare("SELECT COUNT(*) FROM irr_runs WHERE customer_id = ? AND status = 'queued'");
+  $st->execute([$cid]);
+  return (int)$st->fetchColumn() > 0;
 }
 
 function irr_any_running(PDO $db, $cid) {

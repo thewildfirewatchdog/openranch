@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- OpenRanch mark: a harvest sun over three furrows. Drawn in the dashboard's
+       own palette so the installed app matches the site. Deliberately simple:
+       it has to stay readable at 32px in a browser tab. -->
+  <rect width="512" height="512" rx="96" fill="#fbf7ee"/>
+  <circle cx="256" cy="196" r="84" fill="#d98a2b"/>
+  <g stroke="#9a5410" stroke-width="20" stroke-linecap="round">
+    <path d="M256 72 v-34"/>
+    <path d="M132 196 h-34"/><path d="M380 196 h34"/>
+    <path d="M168 108 l-24 -24"/><path d="M344 108 l24 -24"/>
+    <path d="M168 284 l-24 24"/><path d="M344 284 l24 24"/>
+  </g>
+  <g fill="none" stroke="#5a7d3a" stroke-width="30" stroke-linecap="round">
+    <path d="M74 352 q182 -46 364 0"/>
+    <path d="M74 412 q182 -46 364 0"/>
+    <path d="M74 472 q182 -46 364 0"/>
+  </g>
+</svg>

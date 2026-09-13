@@ -28,6 +28,7 @@
 require 'config.php';
 require_once 'thresholds_lib.php';
 require_once 'irrigation_lib.php';
+require_once 'nav.php';
 or_session_resume();
 $customer = current_customer();
 
@@ -176,6 +177,7 @@ if (isset($_GET['history'])) {
                   padding:5px 10px; border-radius:7px; }
   .who a.addbtn:hover { text-decoration:none; filter:brightness(1.05); }
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:14px; }
+  @media (max-width:759px) { body { padding-bottom:calc(76px + env(safe-area-inset-bottom)); } }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
   .card.template { opacity:.55; }
   .card h2 { font-size:15px; display:flex; align-items:center; gap:8px; }
@@ -362,9 +364,31 @@ if (isset($_GET['history'])) {
   <?php if (!empty($_GET['err'])): ?><div class="irrmsg bad"><?=  htmlspecialchars($_GET['err']) ?></div><?php endif; ?>
   <?php include __DIR__ . '/irrigation_panel.php'; ?>
 <?php endif; ?>
+<?php if ($customer): ?>
+<script>
+// Phones land on Controls, which is the screen you actually want outdoors.
+// Scoped to "/" so the Sensors tab (index.php) and any bookmark still open the
+// dashboard, and skipped once someone has chosen the dashboard this session.
+(function () {
+  try {
+    if (location.pathname !== '/') return;
+    if (sessionStorage.getItem('or_stay_dashboard') === '1') return;
+    if (window.innerWidth >= 760) return;
+    location.replace('controls.php');
+  } catch (e) {}
+})();
+</script>
+<?php endif; ?>
 <div class="grid" id="grid"></div>
 <div id="toast"></div>
+<?php if ($customer) or_bottom_nav('sensors'); ?>
 <div id="installbar"></div>
+<script>
+// Only a deliberate tap on the Sensors tab pins a phone to the dashboard.
+// Landing here because login redirected must not, or the Controls screen
+// would never come up again on that phone.
+try { if (location.search.indexOf('tab=1') !== -1) sessionStorage.setItem('or_stay_dashboard','1'); } catch (e) {}
+</script>
 <script src="/pwa.js" defer></script>
 
 <script>

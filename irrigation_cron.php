@@ -17,11 +17,39 @@ require __DIR__ . '/config.php';
 require_once __DIR__ . '/irrigation_lib.php';
 require_once __DIR__ . '/wpush.php';
 
-$db  = db();
+$db      = db();
+$verbose = in_array('-v', $argv ?? [], true);
+$once    = in_array('--once', $argv ?? [], true);
+function vlog($m) { global $verbose; if ($verbose) echo $m, "\n"; }
+
+// Cron's finest resolution is a minute, but a master lead of 15 seconds -- and
+// a zone that should close on time rather than up to 59 seconds late -- needs
+// finer servicing than that. So one invocation services the whole minute in
+// short passes instead of doing one pass and exiting. --once does a single pass
+// for tests and manual runs.
+const IRR_SUBTICK   = 5;    // seconds between passes
+const IRR_TICK_SPAN = 55;   // stop before the next cron invocation starts
+
+// A run that overruns must never overlap the next one.
+$lockFh = fopen(sys_get_temp_dir() . '/openranch-irrigation.lock', 'c');
+if ($lockFh === false || !flock($lockFh, LOCK_EX | LOCK_NB)) {
+  vlog('another tick is still running; exiting');
+  exit(0);
+}
+
+$startedAt = time();
+do {
+  irr_tick($db);
+  if ($once) break;
+  if (time() - $startedAt + IRR_SUBTICK > IRR_TICK_SPAN) break;
+  sleep(IRR_SUBTICK);
+} while (true);
+flock($lockFh, LOCK_UN);
+exit(0);
+
+function irr_tick(PDO $db) {
 $utc = new DateTimeImmutable('now', new DateTimeZone('UTC'));
 $loc = $utc->setTimezone(irr_tz());
-$verbose = in_array('-v', $argv ?? [], true);
-function vlog($m) { global $verbose; if ($verbose) echo $m, "\n"; }
 
 // Only customers that have set something up.
 $cids = $db->query('SELECT DISTINCT customer_id FROM irr_zones')->fetchAll(PDO::FETCH_COLUMN);
@@ -134,16 +162,54 @@ foreach ($cids as $cid) {
     foreach (irr_next_to_start($rows, $running, $sequential) as $r) $toStart[] = $r;
   }
 
-  // The master valve opens before any zone does, and only closes once every
-  // zone has: ensure it is open first, then open zones.
-  if ($toStart) irr_ensure_master($db, $cid, true);
+  // ---- master valve, two phases -------------------------------------------
+  // Phase 1: if zones are due and the master is shut, open the master, stamp
+  // each of those runs with the earliest time it may open, and open nothing
+  // else this pass. Phase 2: once the lead has elapsed, the zones open.
+  // A master that is already open (mid-program) skips straight to phase 2.
+  $master = irr_master_zone($db, $cid);
+  $lead   = (int)($s['master_lead_seconds'] ?? 15);
+
+  if ($toStart && $master && $lead > 0 && !irr_master_is_open($db, $master)) {
+    irr_send_cmd($db, $master['device_id'], $master['cmd_on']);
+    $mark = $db->prepare('UPDATE irr_runs SET start_after = (NOW() + INTERVAL ? SECOND) WHERE id = ?');
+    foreach ($toStart as $r) $mark->execute([$lead, $r['id']]);
+    vlog("  master opened, holding {$lead}s before " . count($toStart) . ' zone(s)');
+    $toStart = [];
+  } elseif ($toStart && $master && !irr_master_is_open($db, $master)) {
+    irr_send_cmd($db, $master['device_id'], $master['cmd_on']);   // lead of 0
+  }
+
   foreach ($toStart as $r) {
+    // Phase 2 gate: a run stamped in phase 1 waits until its lead has passed.
+    if (!irr_due($r['start_after'] ?? null, $utc)) continue;
     $z = irr_zone($db, $cid, $r['zone_id']);
     if (!$z) { $db->prepare("UPDATE irr_runs SET status='stopped', ended=NOW() WHERE id=?")->execute([$r['id']]); continue; }
     if (irr_start_run($db, $z, $r, $why)) vlog("  zone {$z['id']} started for {$r['planned_min']} min");
     else                                   vlog("  zone {$z['id']} could not start: $why");
   }
-  irr_ensure_master($db, $cid, irr_any_running($db, $cid));
+
+  // Closing is the mirror image: once nothing is running AND nothing is waiting
+  // to start, note the time, then close the master once the lead has passed.
+  if ($master) {
+    $busy = irr_any_running($db, $cid) || irr_any_queued($db, $cid);
+    $s    = irr_settings($db, $cid);                 // re-read: phase 1 may have written
+    if ($busy) {
+      if ($s['master_close_after'] !== null) {
+        $db->prepare('UPDATE irr_settings SET master_close_after = NULL WHERE customer_id = ?')->execute([$cid]);
+      }
+    } elseif (irr_master_is_open($db, $master)) {
+      if ($s['master_close_after'] === null) {
+        $db->prepare('UPDATE irr_settings SET master_close_after = (NOW() + INTERVAL ? SECOND) WHERE customer_id = ?')
+           ->execute([max(0, $lead), $cid]);
+        vlog("  last zone closed, master closes in {$lead}s");
+      } elseif (irr_due($s['master_close_after'], $utc)) {
+        irr_send_cmd($db, $master['device_id'], $master['cmd_off']);
+        $db->prepare('UPDATE irr_settings SET master_close_after = NULL WHERE customer_id = ?')->execute([$cid]);
+        vlog('  master closed');
+      }
+    }
+  }
 
   // ---- 4. flow while nothing is scheduled ----------------------------------
   irr_check_unscheduled_flow($db, $cid, $s, $utc);
@@ -152,4 +218,5 @@ foreach ($cids as $cid) {
   irr_eval_rules($db, $cid, $utc);
 }
 
-vlog('done');
+vlog('pass done');
+}

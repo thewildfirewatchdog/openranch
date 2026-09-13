@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS irr_zones (
   soil_device_id  INT DEFAULT NULL,
   soil_variable   VARCHAR(50) NOT NULL DEFAULT 'moisture',
   soil_skip_above DOUBLE DEFAULT NULL,       -- NULL = never skip on moisture
+  default_minutes DOUBLE NOT NULL DEFAULT 10, -- Controls screen: tap = run this long
   is_master       TINYINT NOT NULL DEFAULT 0,-- opens before, closes after others
   sort_order      INT NOT NULL DEFAULT 0,
   enabled         TINYINT NOT NULL DEFAULT 1,
@@ -70,6 +71,7 @@ CREATE TABLE IF NOT EXISTS irr_runs (
   seq           INT NOT NULL DEFAULT 0,
   planned_min   DOUBLE NOT NULL DEFAULT 0,
   queued_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+  start_after   DATETIME DEFAULT NULL,
   started       DATETIME DEFAULT NULL,
   ends_at       DATETIME DEFAULT NULL,
   ended         DATETIME DEFAULT NULL,
@@ -105,6 +107,8 @@ CREATE TABLE IF NOT EXISTS irr_settings (
   rain_delay_until DATETIME DEFAULT NULL,
   leak_minutes     INT NOT NULL DEFAULT 10,     -- unscheduled flow tolerated
   leak_min_gpm     DOUBLE NOT NULL DEFAULT 0.2, -- below this is meter noise
+  master_lead_seconds INT NOT NULL DEFAULT 15,
+  master_close_after  DATETIME DEFAULT NULL,
   weather_json     TEXT DEFAULT NULL,           -- cached Open-Meteo response
   weather_at       DATETIME DEFAULT NULL        -- cached at; refetched hourly
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

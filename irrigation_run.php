@@ -4,6 +4,8 @@
 //   POST act=run     zone_id, minutes    start one zone now
 //   POST act=stop    zone_id             close one zone now
 //   POST act=stopall                     close everything now
+//   POST act=runall                      run every zone for its default duration
+//   POST act=hold    zone_id             open a zone with no end time
 //   POST act=once    program_id          run a whole program once, now
 //   POST act=delay   hours               hold every program for N hours
 //   POST act=undelay                     clear the hold
@@ -14,7 +16,7 @@
 require __DIR__ . '/config.php';
 require_once __DIR__ . '/irrigation_lib.php';
 require_once __DIR__ . '/wpush.php';
-ww_session_start();
+or_boot_session();
 
 $customer = current_customer();
 if (!$customer) { header('Location: login.php'); exit; }
@@ -57,6 +59,44 @@ if ($act === 'stop') {
   foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $run) irr_stop_run($db, $z, $run, 'stopped');
   irr_ensure_master($db, $cid, irr_any_running($db, $cid));   // master closes after
   done($back, $z['name'] . ' stopped.');
+}
+
+if ($act === 'runall') {
+  // Every enabled zone for its own default duration. Queued rather than opened
+  // here: the scheduler starts them in order, and serves the master lead first.
+  $n = 0;
+  foreach (irr_zones($db, $cid, true) as $z) {
+    if ($z['is_master']) continue;
+    $st = $db->prepare("SELECT COUNT(*) FROM irr_runs WHERE zone_id = ? AND status IN ('queued','running')");
+    $st->execute([$z['id']]);
+    if ((int)$st->fetchColumn() > 0) continue;
+    irr_queue_run($db, $cid, $z['id'], (float)($z['default_minutes'] ?? 10), 'manual', null, (int)$z['sort_order']);
+    $n++;
+  }
+  done($back, $n ? "Queued $n zone(s)." : 'Every zone is already running.', $n === 0);
+}
+
+if ($act === 'hold') {
+  // Long-press: open the zone and leave it open. A run with no end time is
+  // never stopped by the scheduler, so it waits for an explicit stop -- which
+  // is the point, but it is also why the tile keeps saying "running".
+  $z = irr_zone($db, $cid, (int)($_POST['zone_id'] ?? 0));
+  if (!$z)            done($back, 'No such zone.', true);
+  if (!$z['enabled']) done($back, 'That zone is switched off.', true);
+  $st = $db->prepare("SELECT COUNT(*) FROM irr_runs WHERE zone_id = ? AND status IN ('queued','running')");
+  $st->execute([$z['id']]);
+  if ((int)$st->fetchColumn() > 0) done($back, $z['name'] . ' is already running.', true);
+
+  $id  = irr_queue_run($db, $cid, $z['id'], 0, 'manual');
+  $run = ['id' => $id, 'customer_id' => $cid, 'program_id' => null, 'planned_min' => 0];
+  irr_ensure_master($db, $cid, true);
+  if (!irr_start_run($db, $z, $run, $why)) {
+    irr_ensure_master($db, $cid, irr_any_running($db, $cid));
+    done($back, 'Could not open ' . $z['name'] . ': ' . $why, true);
+  }
+  // planned_min 0 would give ends_at = now, so clear it: this run has no end.
+  $db->prepare('UPDATE irr_runs SET ends_at = NULL WHERE id = ?')->execute([$id]);
+  done($back, $z['name'] . ' held open until you stop it.');
 }
 
 if ($act === 'stopall') {

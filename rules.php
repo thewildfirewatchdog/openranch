@@ -3,7 +3,7 @@
 require __DIR__ . '/config.php';
 require_once __DIR__ . '/irrigation_lib.php';
 require_once __DIR__ . '/irrigation_ui.php';
-ww_session_start();
+or_boot_session();
 
 $customer = current_customer();
 if (!$customer) { header('Location: login.php'); exit; }

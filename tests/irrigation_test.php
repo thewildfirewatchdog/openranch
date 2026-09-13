@@ -169,6 +169,17 @@ $ivl2 = ['days_mode'=>'interval','interval_days'=>3,'interval_anchor'=>'2026-09-
 eq(irr_next_occurrence($ivl2, at('2026-09-14 00:00'))->format('Y-m-d H:i'), '2026-09-16 05:00',
    'interval program finds its next cycle day');
 
+// ---- master lead deadlines -------------------------------------------------
+$now = new DateTimeImmutable('2026-09-14 06:00:15', new DateTimeZone('UTC'));
+ok(irr_due(null, $now),                      'no deadline is always due');
+ok(irr_due('', $now),                        'empty deadline is always due');
+ok(irr_due('2026-09-14 06:00:00', $now),     'a deadline in the past is due');
+ok(irr_due('2026-09-14 06:00:15', $now),     'a deadline exactly now is due');
+ok(!irr_due('2026-09-14 06:00:16', $now),    'a deadline one second out is not due');
+ok(!irr_due('2026-09-14 06:00:30', $now),    'mid-lead is not due');
+ok(irr_due(new DateTimeImmutable('2026-09-14 05:59:00', new DateTimeZone('UTC')), $now),
+   'accepts a DateTime as well as a string');
+
 // ---- report ----------------------------------------------------------------
 printf("\n%d passed, %d failed\n", $pass, $fail);
 foreach ($failures as $f) echo "  FAIL: $f\n";

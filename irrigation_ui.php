@@ -1,9 +1,11 @@
 <?php
 // OpenRanch — shared chrome for the irrigation pages (zones, programs, rules).
+require_once __DIR__ . '/nav.php';
 // Same harvest palette as the dashboard, laid out mobile-first: one column by
 // default, widening only where there is room.
 
 function irr_head($title, $active = '') {
+  $GLOBALS['irr_active_page'] = $active;
   $site = defined('SITE_NAME') ? SITE_NAME : 'OpenRanch';
   $tabs = ['index.php' => 'Dashboard', 'zones.php' => 'Zones',
            'programs.php' => 'Programs', 'rules.php' => 'Automations'];
@@ -22,7 +24,8 @@ function irr_head($title, $active = '') {
           --grad:linear-gradient(135deg,#f4e7c3 0%,#dbe8c9 55%,#cfe4ef 100%); }
   * { box-sizing:border-box; margin:0; }
   body { background:var(--grad); background-attachment:fixed; color:var(--text);
-         font-family:'DM Sans',system-ui,sans-serif; min-height:100vh; padding:14px; }
+         font-family:'DM Sans',system-ui,sans-serif; min-height:100vh;
+         padding:14px 14px calc(76px + env(safe-area-inset-bottom)); }
   header { display:flex; flex-wrap:wrap; align-items:baseline; gap:10px; margin-bottom:14px; }
   h1 { font-size:20px; } h1 span { color:var(--accent-ink); }
   nav { display:flex; flex-wrap:wrap; gap:6px; margin-left:auto; }
@@ -81,7 +84,14 @@ function irr_head($title, $active = '') {
 <?php
 }
 
-function irr_foot() { echo "</div>\n</body>\n</html>\n"; }
+function irr_foot() {
+  echo "</div>\n";
+  // Map the top-nav key onto the bottom-nav key; they are the same pages.
+  $map = ['zones.php' => 'sensors', 'programs.php' => 'programs',
+          'rules.php' => 'rules',   'more.php' => 'more'];
+  or_bottom_nav($map[$GLOBALS['irr_active_page'] ?? ''] ?? '');
+  echo "</body>\n</html>\n";
+}
 
 function irr_msg() {
   if (!empty($_GET['ok']))  echo '<div class="msg good">' . htmlspecialchars($_GET['ok']) . '</div>';

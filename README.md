@@ -272,6 +272,17 @@ something other than 1/0 still works.
 One zone per customer can be the **master valve**. It opens before any other
 zone opens and closes only once every other zone has closed.
 
+`master_lead_seconds` (default 15, per customer) makes that a real interval
+rather than an ordering: the scheduler opens the master, waits the lead, then
+opens the first zone; when the last zone closes it waits the lead again before
+closing the master. Set it to 0 for same-instant ordering.
+
+Because cron's finest resolution is a minute, one invocation of
+`irrigation_cron.php` services the whole minute in short passes (every 5s) under
+a lock rather than doing a single pass. That is what makes a 15-second lead --
+and a zone closing on time rather than up to 59 seconds late -- possible. Pass
+`--once` for a single pass.
+
 ### Programs
 
 A program has start times (`HH:MM`, local), either chosen weekdays or an
@@ -340,10 +351,12 @@ and automation log.
 
 ```bash
 mysql openranch < migrate_irrigation.sql
+mysql openranch < migrate_master_lead.sql   # if you already ran the one above
 ```
 
 Nine `irr_*` tables. Safe to run more than once; nothing outside those tables is
-touched.
+touched. `migrate_master_lead.sql` adds the master lead columns and is folded
+into `migrate_irrigation.sql` for fresh installs.
 
 ### Tests
 
@@ -354,6 +367,67 @@ php tests/irrigation_test.php
 Covers the scheduling rules directly -- day and time matching, interval cycles,
 seasonal and weather scaling, the weather decision, soil limits, sequential vs
 parallel ordering, and gallon differencing. No database and no network.
+
+## Installable app & the Controls screen
+
+OpenRanch installs to a phone home screen as a PWA and opens on a Controls
+screen built for a thumb.
+
+### Installing
+
+`manifest.json` declares standalone display, the harvest theme colour and icons
+at every size browsers ask for, generated from
+[`icons/openranch-mark.svg`](icons/openranch-mark.svg) (a plain variant and a
+maskable one whose mark sits inside Android's safe zone). `sw.js` caches the
+shell and serves `offline.html` when a navigation fails. Device readings are
+never cached -- a stale "pump: ON" would be worse than showing nothing -- and
+the endpoints boards use are passed straight through.
+
+A hint banner offers "Add to Home Screen" once per device; dismissing it is
+remembered in `localStorage`.
+
+Regenerate the icons after editing the SVG:
+
+```bash
+cd icons
+for s in 32 96 144 180 192 256 384 512; do rsvg-convert -w $s -h $s openranch-mark.svg -o icon-$s.png; done
+```
+
+**Notifications** keep working from the installed app. On Android they work in
+the browser and in the PWA; on iPhone and iPad they require iOS 16.4 or later
+**and** that OpenRanch has been added to the Home Screen -- `pwa.js` only offers
+the button once it is running standalone, because Safari rejects the
+subscription otherwise.
+
+### Controls
+
+`/controls.php` is a grid of large tiles, one per zone and one per commandable
+device that is not already a zone's valve.
+
+| Gesture | Zone tile | Device tile |
+|---|---|---|
+| Tap | run for the zone's default duration, with a countdown | toggle ON/OFF |
+| Long press | hold open, or stop if running | — |
+
+**Run All** queues every enabled zone for its own default duration; **Stop All**
+closes everything. Each zone tile carries its next scheduled run. A zone held
+open by a long press has no end time, so the scheduler leaves it alone until it
+is stopped.
+
+Set the tap duration per zone on the Zones page (`default_minutes`, default 10).
+
+Everything goes through the same `commands` rows the dashboard has always
+written, so no firmware changes.
+
+### Navigation
+
+A bottom bar -- Controls, Sensors, Programs, Rules, More -- appears under 760px
+and hides on wider screens, where the pages already carry a top nav.
+
+On a phone, a signed-in customer opening the site root lands on Controls.
+Tapping **Sensors** pins the dashboard for the rest of the session, so the
+redirect does not fight the tab. Anonymous visitors are never redirected: the
+public dashboard stays the front page.
 
 ## How a device posts readings
 
@@ -441,6 +515,10 @@ register.php         device self-provisioning (mints the claim code)
 claim.php            customer claims a device with its code
 claim_lib.php        claim codes, sensor-type naming, free-tier counting
 signup.php           customer self-signup
+controls.php         phone-first Controls screen
+nav.php              bottom navigation bar
+more.php             account and the rest of the pages
+session_compat.php   session-helper shim, see the note below
 irrigation_cron.php  the scheduler; run once a minute
 irrigation_lib.php   scheduling rules, weather, automations (pure half is tested)
 irrigation_run.php   manual run / stop / hold actions
@@ -463,6 +541,9 @@ sw.js pwa.js         service worker and install prompt
 schema.sql           complete database schema
 migrate_claim.sql    adds claim codes + plans to an existing install
 migrate_irrigation.sql  adds the irrigation tables to an existing install
+migrate_master_lead.sql adds the master valve lead columns
+migrate_controls.sql    adds the per-zone tap duration
+icons/openranch-mark.svg  the mark every icon size is generated from
 config.example.php   configuration template
 install.sh           installer
 ```

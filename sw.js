@@ -13,14 +13,18 @@
  * nothing, so a failed data fetch surfaces as an offline state instead.
  */
 
-const VERSION    = 'ww-v1';
+const VERSION    = 'openranch-v2';
 const SHELL      = `${VERSION}-shell`;
 const OFFLINE_URL = '/offline.html';
 
 const SHELL_ASSETS = [
   OFFLINE_URL,
   '/manifest.json',
+  '/icons/icon-96.png',
+  '/icons/icon-144.png',
   '/icons/icon-192.png',
+  '/icons/icon-256.png',
+  '/icons/icon-384.png',
   '/icons/icon-512.png',
   '/icons/icon-maskable-192.png',
   '/icons/icon-maskable-512.png',
@@ -30,7 +34,8 @@ const SHELL_ASSETS = [
 
 // Endpoints the boards and the command buttons use. The SW must stay out of
 // their way entirely — no caching, no rewriting, no interception.
-const PASSTHROUGH = ['/ingest.php', '/poll.php', '/cmd.php', '/register.php'];
+const PASSTHROUGH = ['/ingest.php', '/poll.php', '/cmd.php', '/register.php',
+                     '/irrigation_run.php'];
 
 self.addEventListener('install', event => {
   event.waitUntil(

@@ -4,6 +4,8 @@
 // Shared by register.php (mints a code) and claim.php (spends it). Kept in one
 // file so the alphabet and the sensor-type table cannot drift apart.
 
+require_once __DIR__ . '/session_compat.php';
+
 // Claim-code alphabet: uppercase, with 0/O and 1/I removed so a code read off a
 // board's display or a label is not ambiguous. 32 characters, 6 positions, so
 // 32^6 = ~1.07e9 codes -- collisions are handled by retrying, not hoped away.

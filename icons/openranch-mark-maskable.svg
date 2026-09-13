@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Maskable variant: the same mark shrunk into the safe zone (the inner 80%
+       circle) so Android can crop it to any shape without clipping anything. -->
+  <rect width="512" height="512" fill="#f4e7c3"/>
+  <g transform="translate(256 256) scale(0.62) translate(-256 -256)">
+    <circle cx="256" cy="196" r="84" fill="#d98a2b"/>
+    <g stroke="#9a5410" stroke-width="20" stroke-linecap="round">
+      <path d="M256 72 v-34"/>
+      <path d="M132 196 h-34"/><path d="M380 196 h34"/>
+      <path d="M168 108 l-24 -24"/><path d="M344 108 l24 -24"/>
+      <path d="M168 284 l-24 24"/><path d="M344 284 l24 24"/>
+    </g>
+    <g fill="none" stroke="#5a7d3a" stroke-width="30" stroke-linecap="round">
+      <path d="M74 352 q182 -46 364 0"/>
+      <path d="M74 412 q182 -46 364 0"/>
+      <path d="M74 472 q182 -46 364 0"/>
+    </g>
+  </g>
+</svg>

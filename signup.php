@@ -11,7 +11,7 @@
 
 require 'config.php';
 require_once 'claim_lib.php';
-ww_session_start();
+or_boot_session();
 
 if (current_customer()) { header('Location: index.php'); exit; }
 

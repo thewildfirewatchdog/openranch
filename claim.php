@@ -12,7 +12,7 @@
 
 require 'config.php';
 require_once 'claim_lib.php';
-ww_session_start();
+or_boot_session();
 
 $customer = current_customer();
 if (!$customer) { header('Location: login.php'); exit; }

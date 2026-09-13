@@ -3,7 +3,7 @@
 require __DIR__ . '/config.php';
 require_once __DIR__ . '/irrigation_lib.php';
 require_once __DIR__ . '/irrigation_ui.php';
-ww_session_start();
+or_boot_session();
 
 $customer = current_customer();
 if (!$customer) { header('Location: login.php'); exit; }
@@ -35,6 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $q->execute($id ? [$cid, $id] : [$cid]);
     }
     $args = [$name, $devId, (int)$_POST['cmd_on'], (int)$_POST['cmd_off'],
+             max(0.5, min(720, (float)($_POST['default_minutes'] ?? 10))),
              ($_POST['flow_device_id'] ?: null), trim($_POST['flow_variable'] ?: 'flow_gpm'),
              trim($_POST['total_variable'] ?: 'total_gal'),
              ($_POST['soil_device_id'] ?: null), trim($_POST['soil_variable'] ?: 'moisture'),
@@ -43,17 +44,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($id) {
       $args[] = $id; $args[] = $cid;
-      $db->prepare('UPDATE irr_zones SET name=?, device_id=?, cmd_on=?, cmd_off=?,
+      $db->prepare('UPDATE irr_zones SET name=?, device_id=?, cmd_on=?, cmd_off=?, default_minutes=?,
                       flow_device_id=?, flow_variable=?, total_variable=?, soil_device_id=?,
                       soil_variable=?, soil_skip_above=?, is_master=?, sort_order=?, enabled=?
                     WHERE id=? AND customer_id=?')->execute($args);
       irr_back('zones.php', 'Zone saved.');
     }
     array_unshift($args, $cid);
-    $db->prepare('INSERT INTO irr_zones (customer_id, name, device_id, cmd_on, cmd_off,
+    $db->prepare('INSERT INTO irr_zones (customer_id, name, device_id, cmd_on, cmd_off, default_minutes,
                     flow_device_id, flow_variable, total_variable, soil_device_id, soil_variable,
                     soil_skip_above, is_master, sort_order, enabled)
-                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute($args);
+                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute($args);
     irr_back('zones.php', 'Zone added.');
   }
 
@@ -109,6 +110,11 @@ $e = $edit ?: [];
     <div class="row three">
       <div><label>Open code</label><input name="cmd_on" type="number" min="0" max="5" value="<?= (int)($e['cmd_on'] ?? 1) ?>"></div>
       <div><label>Close code</label><input name="cmd_off" type="number" min="0" max="5" value="<?= (int)($e['cmd_off'] ?? 0) ?>"></div>
+      <div><label>Tap runs for (min)</label>
+        <input name="default_minutes" type="number" step="any" min="0.5"
+               value="<?= (float)($e['default_minutes'] ?? 10) ?>"></div>
+    </div>
+    <div class="row three">
       <div><label>Order</label><input name="sort_order" type="number" value="<?= (int)($e['sort_order'] ?? 0) ?>"></div>
     </div>
     <div class="row three">
