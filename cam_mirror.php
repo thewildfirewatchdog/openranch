@@ -20,6 +20,7 @@ require __DIR__ . '/config.php';
 require_once __DIR__ . '/camera_lib.php';
 
 const WD_CAM_ROOT = '/var/www/watchdog/cam/cam';
+const WD_CAM_NAME = 'shop';
 const MIRROR_SLUG = 'watchdog_cam_shop';
 const MIRROR_NAME = 'Shop Camera (Watchdog)';
 // Don't store the same picture twice: the source is overwritten about once a
@@ -32,12 +33,11 @@ function vlog($m) { global $verbose; if ($verbose) echo $m, "\n"; }
 
 $db = db();
 
-// Which camera on the source side. 'shop' is the only one today; if Watchdog
-// grows another, this picks the most recently updated live.jpg.
-$candidates = glob(WD_CAM_ROOT . '/*/live.jpg') ?: [];
-if (!$candidates) { vlog('no Watchdog camera frame found; nothing to mirror'); exit(0); }
-usort($candidates, fn($a, $b) => filemtime($b) <=> filemtime($a));
-$src = $candidates[0];
+// Which camera on the source side: one named camera, never "the newest one".
+// A source install can hold cameras that must not be copied here (a private
+// indoor camera, say), and picking by mtime would copy whichever fired last.
+$src = WD_CAM_ROOT . '/' . WD_CAM_NAME . '/live.jpg';
+if (!is_file($src)) { vlog('no source camera frame found; nothing to mirror'); exit(0); }
 
 if (!is_readable($src)) { vlog("cannot read $src"); exit(0); }
 $mtime = filemtime($src);

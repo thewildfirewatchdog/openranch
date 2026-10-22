@@ -1,0 +1,5 @@
+# Every change to main needs the project owner's approval. Branch protection
+# enforces this; it is what keeps a well-meant pull request from landing
+# unreviewed. To share the load later, add a maintainer's handle after the
+# owner's, or give them their own paths (e.g. `/bot/ @someone`).
+* @thewildfirewatchdog

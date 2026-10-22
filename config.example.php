@@ -137,6 +137,14 @@ define('LORAWAN_KEY', '');
 define('LORAWAN_INTERVAL', 900);
 
 // ---------------------------------------------------------------------------
+// Telegram assistant (bot/). The bot and the MCP server call three privileged
+// /api/v1/ endpoints with this secret; it must equal BOT_SHARED_SECRET in the
+// bot's .env. Leave it empty to switch those endpoints off. See bot/README.md.
+//     php -r 'echo bin2hex(random_bytes(24)), "\n";'
+// ---------------------------------------------------------------------------
+define('BOT_SHARED_SECRET', '');
+
+// ---------------------------------------------------------------------------
 // Web Push (VAPID). Optional — leave the two keys empty and the dashboard
 // still works, it just falls back to email notifications and the "enable
 // notifications" button stays inert.

@@ -1,0 +1,53 @@
+# Runs on every pull request and every push to main. A pull request cannot be
+# merged until both jobs pass (branch protection requires them by name, so
+# rename a job here and you must update the protection rule too).
+#
+# Nothing here deploys anything. The project's own live site is updated by
+# hand from a reviewed copy; GitHub never pushes code to a server.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: none
+
+      - name: PHP syntax check (every .php file)
+        run: |
+          fail=0
+          while IFS= read -r -d '' f; do
+            php -l "$f" >/dev/null || { php -l "$f"; fail=1; }
+          done < <(find . -name '*.php' -not -path './.git/*' -print0)
+          exit $fail
+
+      - name: Python syntax check (bot and MCP server)
+        run: python3 -m py_compile bot/*.py mcp/*.py
+
+      - name: Tests
+        run: php tests/run.php
+
+      - name: config.php must never be committed
+        run: test ! -e config.php
+
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

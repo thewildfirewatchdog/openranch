@@ -76,6 +76,11 @@ const CLAIM_TYPES = [
   ['Pump',                ['engine_state']],
   ['Weather Station',     ['moisture', 'rain']],
   ['Temp / Humidity',     ['temp_c', 'humidity_pct']],
+  // relay_state is reported by many boards that switch something, so it sits
+  // below every specific rule (pump, sprinkler, PIR trigger, flame...) and
+  // only names a board nothing above recognises. Above the battery catch-alls
+  // so a battery-powered relay is a "Relay", not a "Battery Monitor".
+  ['Relay',               ['relay_state']],
   ['Battery Monitor',     ['batt1_v']],
   ['Battery Monitor',     ['battery_v']],
 ];

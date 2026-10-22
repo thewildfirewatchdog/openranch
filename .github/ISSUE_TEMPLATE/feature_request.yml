@@ -1,0 +1,21 @@
+name: Idea or feature
+description: Suggest something new. Opening this first saves you building something that might not fit.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The job on the ranch or farm, not the solution. "I want to know when the trough is low" beats "add a trough widget".
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How you imagine it working
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help build it?
+      options:
+        - label: I'd like to send a pull request for this

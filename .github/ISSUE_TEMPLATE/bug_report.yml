@@ -1,0 +1,23 @@
+name: Bug report
+description: Something that used to work, or should work, doesn't.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your setup
+      description: Server OS, PHP version, and the board or sensor involved (if any).
+      placeholder: "Ubuntu 24.04, PHP 8.3, ESP32 flow meter"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error messages or logs
+      description: Remove any tokens, passwords, keys or email addresses first.
+      render: text

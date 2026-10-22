@@ -30,3 +30,7 @@ vendor/
 
 # Demo/runtime flags and state
 DEMO_ON
+
+# Python bytecode
+__pycache__/
+*.pyc

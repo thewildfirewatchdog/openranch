@@ -364,7 +364,8 @@ into `migrate_irrigation.sql` for fresh installs.
 ### Tests
 
 ```bash
-php tests/irrigation_test.php
+php tests/run.php            # every test file
+php tests/irrigation_test.php  # just the scheduler
 ```
 
 Covers the scheduling rules directly -- day and time matching, interval cycles,
@@ -767,4 +768,9 @@ install.sh           installer
 
 MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Remote Control Ranch LLC.
 
-Contributions welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+Free to use, change, run for yourself or for others, and share. This
+project is a gift. Contributions are welcome: fork it, make your change on a
+branch, and open a pull request. `main` is protected, so every change is
+tested and reviewed before it lands, and nothing on GitHub ever deploys to
+anyone's running dashboard. See [CONTRIBUTING.md](CONTRIBUTING.md),
+[SECURITY.md](SECURITY.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

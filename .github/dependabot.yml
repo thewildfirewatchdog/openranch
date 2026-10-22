@@ -1,0 +1,8 @@
+# Keeps the CI actions on supported versions. The project itself has no
+# package dependencies to update.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
