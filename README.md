@@ -6,6 +6,9 @@ readings over HTTPS and poll for commands; the dashboard shows every device as
 a live card, charts any variable on tap, and can send simple ON/OFF commands
 back.
 
+LoRaWAN sensors work too: The Things Stack or ChirpStack forwards uplinks to
+`lorawan.php` (see [docs/lorawan.md](docs/lorawan.md)).
+
 It is deliberately boring: plain PHP, MySQL and nginx. No framework, no build
 step, no package manager, no JavaScript bundle. Drop the files on a server,
 import one schema, and it runs.

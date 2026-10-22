@@ -59,9 +59,11 @@ CREATE TABLE IF NOT EXISTS devices (
   mac               VARCHAR(17) DEFAULT NULL, -- set by register.php self-provisioning
   claim_code        CHAR(6) DEFAULT NULL,   -- single-use code; NULL once claimed
   is_camera         TINYINT NOT NULL DEFAULT 0, -- uploads JPEG snapshots
+  dev_eui           CHAR(16) DEFAULT NULL,  -- LoRaWAN DevEUI; set by lorawan.php
   UNIQUE KEY slug (slug),
   UNIQUE KEY uniq_mac (mac),                -- many NULLs allowed; real MACs unique
   UNIQUE KEY uniq_claim_code (claim_code),  -- likewise: many NULLs, live codes unique
+  UNIQUE KEY uniq_dev_eui (dev_eui),        -- likewise
   KEY idx_customer (customer_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

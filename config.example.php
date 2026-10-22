@@ -125,6 +125,18 @@ define('IRRIGATION_TZ', 'UTC');
 define('PROVISION_KEY', 'CHANGE_ME_PROVISION_KEY');
 
 // ---------------------------------------------------------------------------
+// LoRaWAN receiver (lorawan.php). Your network server (The Things Stack or
+// ChirpStack) sends each uplink here with this key in an X-OpenRanch-Key
+// header. Leave it empty to switch the receiver off. Generate one with:
+//     php -r 'echo bin2hex(random_bytes(24)), "\n";'
+// LORAWAN_INTERVAL is the expected_interval (seconds) given to LoRaWAN devices
+// that register themselves; most sensors report every 10-20 minutes.
+// See docs/lorawan.md.
+// ---------------------------------------------------------------------------
+define('LORAWAN_KEY', '');
+define('LORAWAN_INTERVAL', 900);
+
+// ---------------------------------------------------------------------------
 // Web Push (VAPID). Optional — leave the two keys empty and the dashboard
 // still works, it just falls back to email notifications and the "enable
 // notifications" button stays inert.

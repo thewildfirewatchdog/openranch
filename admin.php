@@ -149,13 +149,15 @@ $msg = $_GET['msg'] ?? '';
 
 <p style="color:#6b6a5a">Templates stay disabled (no data accepted) until you enable them here.</p>
 <table>
-<tr><th>Device</th><th>Status</th><th>MAC</th><th>Token</th><th>Variables</th><th>Customer</th><th></th></tr>
+<tr><th>Device</th><th>Status</th><th>MAC / DevEUI</th><th>Token</th><th>Variables</th><th>Customer</th><th></th></tr>
 <?php foreach ($devices as $d): ?>
 <tr>
   <td><b><?= htmlspecialchars($d['name']) ?></b><br><code><?= $d['slug'] ?></code></td>
   <td><span class="pill <?= $d['enabled'] ? 'en' : 'dis' ?>"><?= $d['enabled'] ? 'ENABLED' : 'TEMPLATE' ?></span></td>
   <td><?php if (!empty($d['mac'])): ?>
         <code style="color:#79c0ff"><?= htmlspecialchars($d['mac']) ?></code>
+      <?php elseif (!empty($d['dev_eui'])): ?>
+        <code style="color:#79c0ff" title="LoRaWAN DevEUI"><?= htmlspecialchars($d['dev_eui']) ?></code><br><small>LoRaWAN</small>
       <?php else: ?>
         <span style="color:#484f58">&mdash;</span>
       <?php endif; ?></td>
